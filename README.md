@@ -89,6 +89,7 @@ In the above example, Commando combines queries to two different databases, enab
 
 The instruction above clearly explains the processes, and creates the required bindings which, when maintained, will help visualize and support your business logic.
 
+
 As Commando is simply a graph-based resolver with easy configuration, it is not limited by any architectural constraints or specific framework.
 
 ## Basics
