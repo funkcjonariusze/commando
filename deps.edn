@@ -13,7 +13,7 @@
                  :extra-paths ["test/perf"]}
            ;;Build jar
            :build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.10"}}
-                   :ns-default commando.build
+                   :ns-default build
                    :paths ["src"]}
            ;;Quick deploy to clojars env CLOJARS_USERNAME=username CLOJARS_PASSWORD=clojars-token clj -X:deploy
            :deploy {:exec-args {:artifact "target/commando.jar"

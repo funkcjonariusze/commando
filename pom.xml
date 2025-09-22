@@ -4,7 +4,7 @@
   <packaging>jar</packaging>
   <groupId>org.clojars.funkcjonariusze</groupId>
   <artifactId>commando</artifactId>
-  <version>1.0.0</version>
+  <version>1.0.1</version>
   <name>commando</name>
   <dependencies>
     <dependency>
@@ -35,6 +35,13 @@
   <licenses>
     <license>
       <name>EPL-2.0</name>
+      <url>https://www.eclipse.org/legal/epl-2.0/</url>
     </license>
   </licenses>
+  <scm>
+    <url>https://github.com/funkcjonariusze/commando</url>
+    <connection>scm:git:git://github.com/funkcjonariusze/commando.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com:funkcjonariusze/commando.git</developerConnection>
+    <tag>1.0.1</tag>
+  </scm>
 </project>

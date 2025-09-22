@@ -1,4 +1,4 @@
-(ns commando.build
+(ns build
   (:require
    [clojure.string          :as str]
    [clojure.tools.build.api :as b]))
