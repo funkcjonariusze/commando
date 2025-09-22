@@ -2,6 +2,8 @@
 <img width="30%" src="./logo/Commando.png">
 </div>
 
+[![Clojars Project](https://img.shields.io/clojars/v/org.clojars.funkcjonariusze/commando.svg)](https://clojars.org/org.clojars.funkcjonariusze/commando)
+
 **Commando** is a flexible Clojure library for managing, extracting, and transforming data inside nested map structures using a declarative command-based DSL.
 
 ## Content
@@ -26,11 +28,10 @@
 
 ```clojure
 ;; deps.edn with git
-;;TODO update pre-release
-{commando/commando {:git/url "https://github.com/SerhiiRI/r1025"
-                    :sha "<latest-sha>"}}
+{org.clojars.funkcjonariusze/commando {:mvn/version "1.0.0"}}
+
 ;; leiningen
-[commando "0.x.x"]
+[org.clojars.funkcjonariusze/commando "1.0.0"]
 ```
 
 ## Quick Start
