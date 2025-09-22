@@ -30,10 +30,10 @@
 
 ```clojure
 ;; deps.edn with git
-{org.clojars.funkcjonariusze/commando {:mvn/version "1.0.0"}}
+{org.clojars.funkcjonariusze/commando {:mvn/version "1.0.1"}}
 
 ;; leiningen
-[org.clojars.funkcjonariusze/commando "1.0.0"]
+[org.clojars.funkcjonariusze/commando "1.0.1"]
 ```
 
 ## Quick Start
