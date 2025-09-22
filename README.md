@@ -3,6 +3,7 @@
 </div>
 
 [![Clojars Project](https://img.shields.io/clojars/v/org.clojars.funkcjonariusze/commando.svg)](https://clojars.org/org.clojars.funkcjonariusze/commando)
+[![Run tests](https://github.com/funkcjonariusze/commando/actions/workflows/unit_test.yml/badge.svg)](https://github.com/funkcjonariusze/commando/actions/workflows/unit_test.yml)
 
 **Commando** is a flexible Clojure library for managing, extracting, and transforming data inside nested map structures using a declarative command-based DSL.
 
