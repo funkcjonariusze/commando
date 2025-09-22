@@ -1,0 +1,5 @@
+{:config-paths ["metosin/malli"],
+ :lint-as {commando.impl.utils/let-def clojure.core/let},
+ :linters {:clojure-lsp/unused-public-var {:level :off},
+           :missing-docstring {:level :off},
+           :unresolved-symbol {:exclude ['(malli.core/=>)]}}}

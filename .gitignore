@@ -1,0 +1,7 @@
+.clj-kondo/.cache/**
+.cpcache/**
+.lsp/**
+cljs-test-runner-out/**
+target/**
+classes/**
+**/.DS_Store

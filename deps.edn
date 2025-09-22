@@ -1,0 +1,32 @@
+{:aliases {:clj-test {:exec-fn cognitect.test-runner.api/test
+                      :extra-deps {io.github.cognitect-labs/test-runner {:git/sha "dfb30dd"
+                                                                         :git/tag "v0.5.1"}}
+                      :extra-paths ["test/unit"]
+                      :main-opts ["-m" "cognitect.test-runner" "-d" "test/unit"]
+                      :patterns [".*-test$"]}
+           :cljs-test {:extra-deps {olical/cljs-test-runner {:mvn/version "3.8.1"}}
+                       :extra-paths ["test/unit"]
+                       :main-opts ["-m" "cljs-test-runner.main" "-d" "test/unit"]
+                       :patterns [".*-test$"]}
+           ;;For local performance regression tests
+           :dev {:extra-deps {criterium/criterium {:mvn/version "0.4.6"}}
+                 :extra-paths ["test/perf"]}
+           ;;For local testing of deployment build
+           :build-jar {:exec-args {:artifact "deps-deploy.jar"
+                                   :installer :local}
+                       :exec-fn deps-deploy.deps-deploy/deploy
+                       :extra-deps {slipset/deps-deploy {:mvn/version "0.2.2"}}}
+           ;;Quick deploy to clojars env CLOJARS_USERNAME=username CLOJARS_PASSWORD=clojars-token clj -X:deploy
+           :deploy {:exec-args {:artifact "commando.jar"
+                                :installer :remote
+                                :sign-releases? true}
+                    :exec-fn deps-deploy.deps-deploy/deploy
+                    :extra-deps {slipset/deps-deploy {:mvn/version "0.2.2"}}}
+           :nrepl-mati {:extra-deps {nrepl/nrepl {:mvn/version "1.3.1"}}
+                        :extra-paths ["test"]
+                        :jvm-opts ["-Djdk.attach.allowAttachSelf"]
+                        :main-opts ["-m" "nrepl.cmdline" "--port" "7888"]}}
+ :deps {metosin/malli {:mvn/version "0.17.0"}
+        org.clojure/clojure {:mvn/version "1.12.1"}
+        org.clojure/clojurescript {:mvn/version "1.12.42"}}
+ :paths ["src"]}

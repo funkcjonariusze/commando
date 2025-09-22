@@ -1,0 +1,13 @@
+{:comment {:wrap? false}
+ :map {:comma? false
+       :force-nl? true}
+ :pair {:force-nl? true}
+ :pair-fn {:hang? false}
+ :style [:community
+         :how-to-ns
+         :sort-require
+         {:max-variance 1000
+          :style-call :require-justify}
+         :sort-dependencies
+         :hiccup]
+ :width 120}
