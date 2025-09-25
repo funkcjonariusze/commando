@@ -1144,7 +1144,15 @@
     (is (commando/failed? (commando/execute [invalid-cmd] invalid-validation-instruction)) "Invalid command validation")
     (is (commando/failed? (commando/execute [throwing-cmd] throwing-recognition-instruction))
         "Command recognition exception")
-    (is (commando/failed? (commando/execute [cmds-builtin/command-from-spec] unexisting-path-instruction)))
+    (let [result (commando/execute [cmds-builtin/command-from-spec] unexisting-path-instruction)]
+      (is (commando/failed? result))
+      (is (=
+            (:errors result)
+            [{:message
+              "Commando. Point dependency failed: key ':commando/from' references non-existent path [\"UNEXISTING_PATH\"]",
+              :path ["2" :container],
+              :command {:commando/from ["UNEXISTING_PATH"]}}
+             {:message "Corrupted compiler structure"}])))
     (is (commando/failed? (commando/execute [cmds-builtin/command-apply-spec] {"plain" {:commando/apply [1 2 3]}}))
         "Missing := parameter causes validation failure"))
   (testing "Basic cases"
