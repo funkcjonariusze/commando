@@ -157,7 +157,7 @@
       :ok (cond-> status-map
             true (update-in [:registry] registry/detach-instruction-commands)
             true (update-in [:internal/cm-running-order] registry/remove-instruction-commands-from-command-vector)
-            (false? utils/*debug-mode*) (select-keys [:status :registry :internal/cm-running-order])))))
+            (false? utils/*debug-mode*) (select-keys [:status :registry :internal/cm-running-order :successes :warnings])))))
 
 (defn ^:private compiler->status-map
   "Cause compiler contains only two :registry and :internal/cm-running-order keys
@@ -169,9 +169,9 @@
     (case (:status compiler)
       :ok (if (true? utils/*debug-mode*)
             (-> (smap/status-map-pure compiler))
-            (-> (smap/status-map-pure (select-keys compiler [:registry :internal/cm-running-order]))))
+            (-> (smap/status-map-pure (select-keys compiler [:registry :internal/cm-running-order :successes :warnings]))))
       :failed compiler)
-    (-> (smap/status-map-pure)
+    (-> (smap/status-map-pure compiler)
         (smap/status-map-handle-error {:message "Corrupted compiler structure"}))))
 
 (defn execute
