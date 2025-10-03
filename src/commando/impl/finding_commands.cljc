@@ -44,19 +44,31 @@
   "Finds and validates a command from registry that matches the given `value`.
    Returns the command-spec if match is found and valid, nil otherwise.
    Throws exception if match is found but validation fails."
-  [command-registry value]
+  [command-registry value path]
   (some (fn [command-spec]
           (when (command? command-spec value)
-            (if (command-valid? command-spec value)
-              command-spec
-              (throw
-               (ex-info
-                (str
-                 "Failed while validating params for "
-                 (:type command-spec)
-                 ". Check ':validate-params-fn' property for corresponding command with value it was evaluated on.")
-                {:command-type (:type command-spec)
-                 :value value})))))
+            (let [value-valid-return (command-valid? command-spec value)]
+              (cond
+                (true? value-valid-return) command-spec
+                (or
+                 (false? value-valid-return)
+                 (nil? value-valid-return))
+                (throw
+                  (ex-info
+                    (str
+                      "Failed while validating params for " (:type command-spec) ". Check ':validate-params-fn' property for corresponding command with value it was evaluated on.")
+                    {:command-type (:type command-spec)
+                     :path path
+                     :value value}))
+                :else
+                (throw
+                  (ex-info
+                    (str
+                      "Failed while validating params for " (:type command-spec) ". Check ':validate-params-fn' property for corresponding command with value it was evaluated on.")
+                    {:command-type (:type command-spec)
+                     :reason value-valid-return
+                     :path path
+                     :value value}))))))
         command-registry))
 
 (defn find-commands
@@ -71,7 +83,7 @@
             remaining-paths (rest queue)
             current-value (get-in instruction current-path)
             debug-stack (if utils/*debug-mode* (get debug-stack-map current-path (list)) (list))]
-        (if-let [command-spec (instruction-command-spec command-registry current-value)]
+        (if-let [command-spec (instruction-command-spec command-registry current-value current-path)]
           (let [command (cm/->CommandMapPath
                          current-path
                          (if utils/*debug-mode* (merge command-spec {:__debug_stack debug-stack}) command-spec))

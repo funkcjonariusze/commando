@@ -370,7 +370,6 @@
 
 (defn cmd-by-path [path commands] (first (filter #(= (cm/command-path %) path) commands)))
 
-
 (deftest build-deps-tree
   (testing "Status handling"
     (is (commando/failed? (#'commando/build-deps-tree failed-status-map)) "Failed status is preserved")
@@ -1363,3 +1362,88 @@
         (is (commando/ok? result2) "Modified execution succeeds")
         (is (= 3 (get-in (:instruction result1) ["0"])) "Original calculation correct")
         (is (= 3000 (get-in (:instruction result2) ["0"])) "Modified calculation correct")))))
+
+
+(deftest execute-wrong-validate-params-fn
+  (testing "':validate-params-fn' for commando/from"
+    (is (status-map-contains-error?
+          (commando/execute
+            [cmds-builtin/command-from-spec]
+            {:commando/from "BROKEN" := []})
+          (fn [error]
+            (= (-> error :error :data)
+              {:command-type :commando/from,
+               :path [],
+               :value {:commando/from "BROKEN", := []}
+               :reason {:commando/from ["commando/from should be a sequence path to value in Instruction: [:some 2 \"value\"]"],
+                        := [
+                            #?(:clj "Expected a fn, var of fn, symbol resolving to a fn"
+                               :cljs "Expected a fn")
+                            "should be a string"]}}))))
+
+    (is (status-map-contains-error?
+          (commando/execute
+            [cmds-builtin/command-from-json-spec]
+            {"commando-from" "BROKEN" "=" ""})
+          (fn [error]
+            (= (-> error :error :data)
+              {:command-type :commando/from-json,
+               :path [],
+               :value {"commando-from" "BROKEN", "=" ""}
+               :reason
+               {"commando-from" ["commando-from should be a sequence path to value in Instruction: [\"some\" 2 \"value\"]"],
+                "=" ["should be at least 1 character"]}})))))
+
+  (testing "':validate-params-fn' for commando/apply"
+    (is
+      (status-map-contains-error?
+        (commando/execute
+          [cmds-builtin/command-apply-spec]
+          {:commando/apply nil := "123"})
+        (fn [error]
+          (= (-> error :error :data)
+            {:command-type :commando/apply,
+             :path [],
+             :value {:commando/apply nil, := "123"}
+             :reason {:= [#?(:clj "Expected a fn, var of fn, symbol resolving to a fn"
+                             :cljs "Expected a fn")]}})))))
+
+  (testing "':validate-params-fn' for commando/fn"
+    (is
+      (status-map-contains-error?
+        (commando/execute
+          [cmds-builtin/command-fn-spec]
+          {:commando/fn "BROKEN" :args "BROKEN"})
+        (fn [error]
+          (= (-> error :error :data)
+            {:command-type :commando/fn,
+             :path [],
+             :value {:commando/fn "BROKEN" :args "BROKEN"}
+             :reason {:commando/fn
+                      [#?(:clj "Expected a fn, var of fn, symbol resolving to a fn"
+                          :cljs "Expected a fn")],
+                      :args ["should be a coll"]}})))))
+
+  (testing "':validate-params-fn' for commando/mutation"
+    (is
+      (status-map-contains-error?
+        (commando/execute
+          [cmds-builtin/command-mutation-spec]
+          {:commando/mutation nil})
+        (fn [error]
+          (= (-> error :error :data)
+            {:command-type :commando/mutation,
+             :path [],
+             :value {:commando/mutation nil}
+             :reason {:commando/mutation ["should be a keyword"]}}))))
+    (is
+      (status-map-contains-error?
+        (commando/execute
+          [cmds-builtin/command-mutation-json-spec]
+          {"commando-mutation" 888})
+        (fn [error]
+          (= (-> error :error :data)
+            {:command-type :commando/mutation-json,
+             :path [],
+             :value {"commando-mutation" 888}
+             :reason {"commando-mutation" ["should be a string"]}}))))))
