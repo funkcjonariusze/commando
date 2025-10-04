@@ -6,7 +6,7 @@
 [![Run tests](https://github.com/funkcjonariusze/commando/actions/workflows/unit_test.yml/badge.svg)](https://github.com/funkcjonariusze/commando/actions/workflows/unit_test.yml)
 [![cljdoc badge](https://cljdoc.org/badge/org.clojars.funkcjonariusze/commando)](https://cljdoc.org/d/org.clojars.funkcjonariusze/commando/1.0.2)
 
-**Commando** is a flexible Clojure library for managing, extracting, and transforming data inside nested map structures using a declarative command-based DSL.
+**Commando** is a flexible Clojure library for managing, extracting, and transforming data inside nested map structures aimed to build your own Data DSL.
 
 ## Content
 
@@ -265,8 +265,8 @@ Let's create a new command using a CommandMapSpec configuration map:
 ```
 
 - `:type` - a unique identifier for this command.
-- `:recognize` - a predicate that recognizes that a structure `{:CALC= ...}` is a command, not just a generic map.
-- `:validate-params` (optional) - validates the structure after recognition.
+- `:recognize-fn` - a predicate that recognizes that a structure `{:CALC= ...}` is a command, not just a generic map.
+- `:validate-params-fn` (optional) - validates the structure after recognition.
 - `:apply` - the function that directly executes the command as params it receives whole instruction, command spec and as a last argument what was recognized by :cm/recognize
 - `:dependencies` - describes the type of dependency this command has. Commando supports three modes:
   - `{:mode :all-inside}` - the command scans itself for dependencies on other commands within its body.
@@ -320,7 +320,7 @@ The concept of a **command** is not limited to map structures it is basically an
 ```clojure
 (commando/execute
   [{:type :custom/json
-	:recognize #(and (string? %) (clojure.string/starts-with? % "json"))
+	:recognize-fn #(and (string? %) (clojure.string/starts-with? % "json"))
 	:apply (fn [_instruction _command-map string-value]
               (clojure.data.json/read-str (apply str (drop 4 string-value))
 				:key-fn keyword))

@@ -27,8 +27,13 @@
 
    Additional optional keys can include:
    - `:validate-params-fn` - a function to validate command structures, and catch 
-          invalid parameters at the anylisis stage
-          (fn [command-map-obj] (if valid-params? command-map-obj (throw ...))
+          invalid parameters at the anylisis stage. Only if the function 
+          return 'true' it ment that the command structure is valid.
+          (fn [data] (throw ...))        => Failure
+          (fn [data] {:reason \"why\"})  => Failure
+          (fn [data] nil )               => Failure
+          (fn [data] false )             => Failure
+          (fn [data] true )              => OK
 
    The function returns a built registry that can be used to resolve Instruction 
   
