@@ -1,6 +1,6 @@
 (ns commando.impl.registry
   "API for registry.
-   
+
    A registry is a collection of command specifications that define how to
    recognize, validate, and execute commands found in instruction map."
   (:require
@@ -39,7 +39,7 @@
 
 (defn attach-instruction-commands [registry]
   (let [registry-meta (meta registry)]
-    (with-meta 
+    (with-meta
       (into (vec registry)
         [default-command-vec-spec
          default-command-map-spec
@@ -50,7 +50,7 @@
   (let [registry-meta (meta registry)]
     (with-meta
       (reduce (fn [acc e]
-                (if 
+                (if
                     (contains?
                       #{default-command-vec-spec
                         default-command-map-spec
@@ -72,7 +72,7 @@
   "Validates:
    - All specs are valid according to CommandMapSpec
    - No duplicate :type values
-   
+
    Returns {:valid? true} or {:valid? false :errors [...]}"
   [command-specs]
   (let [empty-command-spec-list-errors (when (empty? command-specs)
@@ -101,7 +101,10 @@
       {:valid? false :errors all-errors})))
 
 (defn built?
-  "Returns true if the given value is a properly built registry."
+  "Returns true if the given value is a properly built registry.
+
+  Built registry mean that registry was validated and the internal
+  Instruction commands were attached to list of command specifications."
   [registry]
   (and (vector? registry)
        (:registry/validated (meta registry))))
@@ -119,14 +122,12 @@
      A validated registry vector with metadata for caching or throws an error"
   [command-spec-list]
   {:pre [(vector? command-spec-list)]}
-  (let [specs (with-meta command-spec-list
-                {:registry/validated true
-                 :registry/hash (hash command-spec-list)})
-        validation (validate-registry specs)
-        specs-with-instruction-structure-commands (attach-instruction-commands specs)]
-    (if (:valid? validation)
-      specs-with-instruction-structure-commands
-      (throw (ex-info "Invalid registry specification"
-               {:errors (:errors validation)
-                :registry specs})))))
-
+  (let [validation (validate-registry command-spec-list)]
+   (if (:valid? validation)
+     (let [command-spec-list (attach-instruction-commands command-spec-list)]
+       (with-meta command-spec-list
+         {:registry/validated true
+          :registry/hash (hash command-spec-list)}))
+     (throw (ex-info "Invalid registry specification"
+              {:errors (:errors validation)
+               :registry command-spec-list})))))

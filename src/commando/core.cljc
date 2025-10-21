@@ -1,6 +1,5 @@
 (ns commando.core
   (:require
-   [commando.commands.builtin]
    [commando.impl.dependency       :as deps]
    [commando.impl.executing        :as executing]
    [commando.impl.finding-commands :as finding-commands]
@@ -160,7 +159,6 @@
                   (smap/status-map-handle-warning {:message (str utils/exception-message-header
                                                                  "build-compiler. Error building compiler")}))
       :ok (cond-> status-map
-            true (update-in [:registry] registry/detach-instruction-commands)
             true (update-in [:internal/cm-running-order] registry/remove-instruction-commands-from-command-vector)
             (false? utils/*debug-mode*) (select-keys [:status :registry :internal/cm-running-order :successes :warnings])))))
 
