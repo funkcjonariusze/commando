@@ -3,6 +3,10 @@
 
 (def exception-message-header "Commando. ")
 
+;; ------------------
+;; Dynamic Properties
+;; ------------------
+
 (def ^:dynamic *debug-mode*
   "When enabled, debug-stack-map functionality is active in find-commands*."
   false)
@@ -18,18 +22,9 @@
   []
   (or *command-map-spec-registry* []))
 
-(defn serialize-exception
-  "Serializes errors into data structures."
-  [e]
-  (cond
-    (nil? e) nil
-    #?(:clj (instance? Throwable e)
-       :cljs (instance? js/Error e))
-    (Throwable->map e)
-    ;; Maps might already be error representations
-    (map? e) e
-    ;; Default serialization for other types
-    :else {:message (str e)}))
+;; ------------------
+;; Function Resolvers
+;; ------------------
 
 (defn resolve-fn
   "Normalize `x` to a function (fn? x) => true.
@@ -74,4 +69,113 @@
     (fn [x]
       (some? (resolve-fn x)))]))
 
+;; -----------
+;; Error Tools
+;; -----------
 
+#?(:clj
+   (defn ^:private stacktrace->vec-str [^Throwable t]
+     (mapv (fn [^StackTraceElement ste]
+             [(.getClassName ste)
+              (.getMethodName ste)
+              (.getFileName ste)
+              (.getLineNumber ste)])
+       (.getStackTrace t))))
+
+#?(:clj (defn ^:private exception-dispatch-fn [e] (class e)))
+
+#?(:clj (defmulti serialize-exception-fn exception-dispatch-fn))
+
+#?(:clj
+   (defmethod serialize-exception-fn java.lang.Throwable [^Throwable t]
+     {:type           "throwable"
+      :class          (.getName (class t))
+      :message        (str (.getMessage t))
+      :stack-trace    (stacktrace->vec-str t)
+      :cause          (when-let [cause (.getCause t)]
+                        (serialize-exception-fn cause))
+      :data           nil}))
+
+#?(:clj
+   (defmethod serialize-exception-fn java.lang.RuntimeException [^Throwable t]
+     {:type           "runtime-exception"
+      :class          (.getName (class t))
+      :message        (str (.getMessage t))
+      :stack-trace    (stacktrace->vec-str t)
+      :cause          (when-let [cause (.getCause t)]
+                        (serialize-exception-fn cause))
+      :data           nil}))
+
+#?(:clj
+   (defmethod serialize-exception-fn clojure.lang.ExceptionInfo [^clojure.lang.ExceptionInfo t]
+     {:type           "exception-info"
+      :class          (.getName (class t))
+      :message        (str (.getMessage t))
+      :stack-trace    (stacktrace->vec-str t)
+      :cause          (when-let [cause (.getCause t)]
+                        (serialize-exception-fn cause))
+      :data           (if *debug-mode*
+                        (ex-data t)
+                        (pr-str (ex-data t)))}))
+
+#?(:clj
+   (defmethod serialize-exception-fn :default [t]
+     (when (instance? java.lang.Throwable t)
+       {:type           "generic"
+        :class          (.getName (class t))
+        :message        (str (.getMessage t))
+        :stack-trace    (stacktrace->vec-str t)
+        :cause          (when-let [cause (.getCause t)]
+                          (serialize-exception-fn cause))
+        :data           nil})))
+
+#?(:cljs
+   (defn ^:private exception-dispatch-fn [e]
+     (cond
+       (instance? cljs.core.ExceptionInfo e) :cljs-exception-info
+       (instance? js/Error e) :js-error
+       :else nil)))
+
+#?(:cljs
+   (defn ^:private stacktrace->vec-str [^js/Error e]
+     (if-let [stack (.-stack e)] (str stack) nil)))
+
+#?(:cljs
+   (defmulti serialize-exception-fn exception-dispatch-fn))
+
+#?(:cljs
+   (defmethod serialize-exception-fn :cljs-exception-info [^cljs.core.ExceptionInfo e]
+     (let [cause (.-cause e)]
+       {:type           "exception-info"
+        :class          "cljs.core.ExceptionInfo"
+        :message        (.-message e)
+        :stack-trace    (stacktrace->vec-str e)
+        :cause          (when-let [cause (.-cause e)]
+                          (serialize-exception-fn cause))
+        :data           (if *debug-mode*
+                          (.-data e)
+                          (pr-str (.-data e)))})))
+
+#?(:cljs
+   (defmethod serialize-exception-fn :js-error [^js/Error e]
+     {:type           "js-error"
+      :class          "js/Error"
+      :message        (or (.-message e) "No message")
+      :stack-trace    (stacktrace->vec-str e)
+      :cause          nil
+      :data           nil}))
+
+#?(:cljs
+   (defmethod serialize-exception-fn :default [e]
+     nil))
+
+(defn serialize-exception
+  "Serializes errors into data structures."
+  [e]
+  (cond
+    (nil? e) nil
+    #?(:clj (instance? Throwable e)
+       :cljs (instance? js/Error e))
+    (serialize-exception-fn e)
+    (map? e) e
+    :else {:message (str e)}))

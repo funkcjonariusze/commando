@@ -5,6 +5,7 @@
    [commando.commands.builtin :as cmds-builtin]
    [commando.core             :as commando]
    [commando.impl.command-map :as cm]
+   [commando.impl.utils       :as commando-utils]
    [malli.core                :as malli]))
 
 ;; -------
@@ -1367,9 +1368,10 @@
 (deftest execute-wrong-validate-params-fn
   (testing "':validate-params-fn' for commando/from"
     (is (status-map-contains-error?
-          (commando/execute
-            [cmds-builtin/command-from-spec]
-            {:commando/from "BROKEN" := []})
+          (binding [commando-utils/*debug-mode* true]
+            (commando/execute
+              [cmds-builtin/command-from-spec]
+              {:commando/from "BROKEN" := []}))
           (fn [error]
             (= (-> error :error :data)
               {:command-type :commando/from,
@@ -1382,9 +1384,10 @@
                             "should be a string"]}}))))
 
     (is (status-map-contains-error?
-          (commando/execute
-            [cmds-builtin/command-from-json-spec]
-            {"commando-from" "BROKEN" "=" ""})
+          (binding [commando-utils/*debug-mode* true]
+            (commando/execute
+              [cmds-builtin/command-from-json-spec]
+              {"commando-from" "BROKEN" "=" ""}))
           (fn [error]
             (= (-> error :error :data)
               {:command-type :commando/from-json,
@@ -1397,9 +1400,10 @@
   (testing "':validate-params-fn' for commando/apply"
     (is
       (status-map-contains-error?
-        (commando/execute
-          [cmds-builtin/command-apply-spec]
-          {:commando/apply nil := "123"})
+        (binding [commando-utils/*debug-mode* true]
+          (commando/execute
+            [cmds-builtin/command-apply-spec]
+            {:commando/apply nil := "123"}))
         (fn [error]
           (= (-> error :error :data)
             {:command-type :commando/apply,
@@ -1411,9 +1415,10 @@
   (testing "':validate-params-fn' for commando/fn"
     (is
       (status-map-contains-error?
-        (commando/execute
-          [cmds-builtin/command-fn-spec]
-          {:commando/fn "BROKEN" :args "BROKEN"})
+        (binding [commando-utils/*debug-mode* true]
+          (commando/execute
+            [cmds-builtin/command-fn-spec]
+            {:commando/fn "BROKEN" :args "BROKEN"}))
         (fn [error]
           (= (-> error :error :data)
             {:command-type :commando/fn,
@@ -1427,9 +1432,10 @@
   (testing "':validate-params-fn' for commando/mutation"
     (is
       (status-map-contains-error?
-        (commando/execute
-          [cmds-builtin/command-mutation-spec]
-          {:commando/mutation nil})
+        (binding [commando-utils/*debug-mode* true]
+          (commando/execute
+            [cmds-builtin/command-mutation-spec]
+            {:commando/mutation nil}))
         (fn [error]
           (= (-> error :error :data)
             {:command-type :commando/mutation,
@@ -1438,9 +1444,10 @@
              :reason {:commando/mutation ["should be a keyword"]}}))))
     (is
       (status-map-contains-error?
-        (commando/execute
-          [cmds-builtin/command-mutation-json-spec]
-          {"commando-mutation" 888})
+        (binding [commando-utils/*debug-mode* true]
+          (commando/execute
+            [cmds-builtin/command-mutation-json-spec]
+            {"commando-mutation" 888}))
         (fn [error]
           (= (-> error :error :data)
             {:command-type :commando/mutation-json,
