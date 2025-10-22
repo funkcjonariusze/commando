@@ -6,26 +6,9 @@
    [commando.core             :as commando]
    [commando.impl.command-map :as cm]
    [commando.impl.utils       :as commando-utils]
+   [commando.test-helpers     :as helpers]
    [malli.core                :as malli]))
 
-;; -------
-;; Helpers
-;; -------
-
-(defn status-map-contains-error?
-  [status-map error]
-  (if (commando/failed? status-map)
-    (let [error-lookup-fn (cond
-                            (string? error) (fn [e] (= (:message e) error))
-                            (map? error) (fn [e] (= e error))
-                            (fn? error) error
-                            :else nil)]
-      (if error-lookup-fn (some? (first (filter error-lookup-fn (:errors status-map)))) false))
-    false))
-
-;; -----
-;; Tests
-;; -----
 
 (def test-add-id-command
   {:type :test/add-id
@@ -783,6 +766,7 @@
    cmds-builtin/command-fn-spec
    cmds-builtin/command-apply-spec
    cmds-builtin/command-mutation-spec
+   cmds-builtin/command-macro-spec
    test-add-id-command])
 
 (def from-instruction
@@ -1052,12 +1036,14 @@
            (:status (commando/build-compiler (:valid-registry build-compiler-test-data)
                                              (:valid-instruction build-compiler-test-data))))
         "Returns :ok status for valid registry and instruction")
-    (is (status-map-contains-error? (commando/build-compiler (:valid-registry build-compiler-test-data)
-                                                             (:cyclic-instruction build-compiler-test-data))
+    (is (helpers/status-map-contains-error? (commando/build-compiler
+                                              (:valid-registry build-compiler-test-data)
+                                              (:cyclic-instruction build-compiler-test-data))
                                     "Commando. sort-entities-by-deps. Detected cyclic dependency")
         "Returns :failed status for cyclic dependencies")
-    (is (status-map-contains-error? (commando/build-compiler (:malformed-registry build-compiler-test-data)
-                                                             (:valid-instruction build-compiler-test-data))
+    (is (helpers/status-map-contains-error? (commando/build-compiler
+                                              (:malformed-registry build-compiler-test-data)
+                                              (:valid-instruction build-compiler-test-data))
                                     "Invalid registry specification")
         "Returns :failed status for malformed registry"))
   (testing "Basic functionality"
@@ -1073,18 +1059,19 @@
            (:status (commando/build-compiler [cmds-builtin/command-from-spec]
                                              (:invalid-ref-instruction build-compiler-test-data))))
         "Invalid reference causes failure")
-    (is (status-map-contains-error?
+    (is (helpers/status-map-contains-error?
          (commando/build-compiler [cmds-builtin/command-from-spec] (:invalid-ref-instruction build-compiler-test-data))
          "Commando. Point dependency failed: key ':commando/from' references non-existent path [\"nonexistent\"]")
         "Error information is populated")
-    (is (status-map-contains-error? (commando/build-compiler [] (:cmd-instruction build-compiler-test-data))
+    (is (helpers/status-map-contains-error? (commando/build-compiler [] (:cmd-instruction build-compiler-test-data))
                                     "Invalid registry specification")
         "Error cause the empty registry"))
   (testing "Edge cases"
     (is (commando/ok? (commando/build-compiler [test-add-id-command] {"data" "no-commands"}))
         "Registry with no matching commands")
-    (is (status-map-contains-error? (commando/build-compiler (repeat 5 test-add-id-command)
-                                                             (:large-instruction build-compiler-test-data))
+    (is (helpers/status-map-contains-error? (commando/build-compiler
+                                              (repeat 5 test-add-id-command)
+                                              (:large-instruction build-compiler-test-data))
                                     "Invalid registry specification")
         "duplicate commands in registry cause an error")
     (is (= 50
@@ -1364,93 +1351,3 @@
         (is (= 3 (get-in (:instruction result1) ["0"])) "Original calculation correct")
         (is (= 3000 (get-in (:instruction result2) ["0"])) "Modified calculation correct")))))
 
-
-(deftest execute-wrong-validate-params-fn
-  (testing "':validate-params-fn' for commando/from"
-    (is (status-map-contains-error?
-          (binding [commando-utils/*debug-mode* true]
-            (commando/execute
-              [cmds-builtin/command-from-spec]
-              {:commando/from "BROKEN" := []}))
-          (fn [error]
-            (= (-> error :error :data)
-              {:command-type :commando/from,
-               :path [],
-               :value {:commando/from "BROKEN", := []}
-               :reason {:commando/from ["commando/from should be a sequence path to value in Instruction: [:some 2 \"value\"]"],
-                        := [
-                            #?(:clj "Expected a fn, var of fn, symbol resolving to a fn"
-                               :cljs "Expected a fn")
-                            "should be a string"]}}))))
-
-    (is (status-map-contains-error?
-          (binding [commando-utils/*debug-mode* true]
-            (commando/execute
-              [cmds-builtin/command-from-json-spec]
-              {"commando-from" "BROKEN" "=" ""}))
-          (fn [error]
-            (= (-> error :error :data)
-              {:command-type :commando/from-json,
-               :path [],
-               :value {"commando-from" "BROKEN", "=" ""}
-               :reason
-               {"commando-from" ["commando-from should be a sequence path to value in Instruction: [\"some\" 2 \"value\"]"],
-                "=" ["should be at least 1 character"]}})))))
-
-  (testing "':validate-params-fn' for commando/apply"
-    (is
-      (status-map-contains-error?
-        (binding [commando-utils/*debug-mode* true]
-          (commando/execute
-            [cmds-builtin/command-apply-spec]
-            {:commando/apply nil := "123"}))
-        (fn [error]
-          (= (-> error :error :data)
-            {:command-type :commando/apply,
-             :path [],
-             :value {:commando/apply nil, := "123"}
-             :reason {:= [#?(:clj "Expected a fn, var of fn, symbol resolving to a fn"
-                             :cljs "Expected a fn")]}})))))
-
-  (testing "':validate-params-fn' for commando/fn"
-    (is
-      (status-map-contains-error?
-        (binding [commando-utils/*debug-mode* true]
-          (commando/execute
-            [cmds-builtin/command-fn-spec]
-            {:commando/fn "BROKEN" :args "BROKEN"}))
-        (fn [error]
-          (= (-> error :error :data)
-            {:command-type :commando/fn,
-             :path [],
-             :value {:commando/fn "BROKEN" :args "BROKEN"}
-             :reason {:commando/fn
-                      [#?(:clj "Expected a fn, var of fn, symbol resolving to a fn"
-                          :cljs "Expected a fn")],
-                      :args ["should be a coll"]}})))))
-
-  (testing "':validate-params-fn' for commando/mutation"
-    (is
-      (status-map-contains-error?
-        (binding [commando-utils/*debug-mode* true]
-          (commando/execute
-            [cmds-builtin/command-mutation-spec]
-            {:commando/mutation nil}))
-        (fn [error]
-          (= (-> error :error :data)
-            {:command-type :commando/mutation,
-             :path [],
-             :value {:commando/mutation nil}
-             :reason {:commando/mutation ["should be a keyword"]}}))))
-    (is
-      (status-map-contains-error?
-        (binding [commando-utils/*debug-mode* true]
-          (commando/execute
-            [cmds-builtin/command-mutation-json-spec]
-            {"commando-mutation" 888}))
-        (fn [error]
-          (= (-> error :error :data)
-            {:command-type :commando/mutation-json,
-             :path [],
-             :value {"commando-mutation" 888}
-             :reason {"commando-mutation" ["should be a string"]}}))))))

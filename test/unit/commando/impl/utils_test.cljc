@@ -3,6 +3,7 @@
    #?(:cljs [cljs.test :refer [deftest is testing]]
       :clj [clojure.test :refer [deftest is testing]])
    [clojure.set               :as set]
+   [commando.test-helpers     :as helpers]
    [commando.impl.utils :as sut]
    [malli.core :as malli]))
 
@@ -16,7 +17,7 @@
              (sut/serialize-exception
                (RuntimeException/new "controlled exception"))]
          (is (=
-               (dissoc e :stack-trace)
+               (helpers/remove-stacktrace e)
                {:type "runtime-exception",
                 :class "java.lang.RuntimeException",
                 :message "controlled exception",
@@ -26,7 +27,7 @@
        (let [e (sut/serialize-exception
                  (ex-info "controlled exception" {}))]
          (is (=
-               (dissoc e :stack-trace)
+               (helpers/remove-stacktrace e)
                {:type "exception-info",
                 :class "clojure.lang.ExceptionInfo",
                 :message "controlled exception",
@@ -36,7 +37,7 @@
        (let [e (sut/serialize-exception
                  (Exception/new "controlled exception"))]
          (is (=
-               (dissoc e :stack-trace)
+               (helpers/remove-stacktrace e)
                {:type "throwable",
                 :class "java.lang.Exception",
                 :message "controlled exception",
@@ -49,10 +50,7 @@
                    (ex-info "LEVEL2" {:level "2"}
                      (ex-info "LEVEL2" {:level "3"}))))]
          (is (=
-               (-> e
-                 (dissoc :stack-trace)
-                 (update-in [:cause] dissoc :stack-trace)
-                 (update-in [:cause :cause] dissoc :stack-trace))
+               (helpers/remove-stacktrace e)
                {:type "exception-info",
                 :class "clojure.lang.ExceptionInfo",
                 :message "LEVEL1",
@@ -74,9 +72,7 @@
                    (NullPointerException/new "LEVEL2")))]
          (is
            (=
-             (-> e
-               (dissoc :stack-trace)
-               (update-in [:cause] dissoc :stack-trace))
+             (helpers/remove-stacktrace e)
              {:type "exception-info",
               :class "clojure.lang.ExceptionInfo",
               :message "LEVEL1",
@@ -96,8 +92,8 @@
          (is
            (=
              (-> e
-               (dissoc :stack-trace)
-               (update-in [:data] map?))
+              (helpers/remove-stacktrace)
+              (update :data map?))
              {:type "exception-info",
               :class "clojure.lang.ExceptionInfo",
               :message ":malli.core/coercion",
@@ -113,8 +109,7 @@
        (let [e (sut/serialize-exception
                  (js/Error. "controlled exception"))]
          (is (=
-               (-> e
-                 (dissoc :stack-trace))
+               (helpers/remove-stacktrace e)
                {:type "js-error"
                 :class "js/Error"
                 :message "controlled exception"
@@ -124,8 +119,7 @@
        (let [e (sut/serialize-exception
                  (ex-info "controlled exception" {}))]
          (is (=
-               (-> e
-                 (dissoc :stack-trace))
+               (helpers/remove-stacktrace e)
                {:type "exception-info",
                 :class "cljs.core.ExceptionInfo",
                 :message "controlled exception",
@@ -137,10 +131,7 @@
                    (ex-info "LEVEL2" {}
                      (js/Error. "LEVEL3"))))]
          (is (=
-               (-> e
-                 (dissoc :stack-trace)
-                 (update-in [:cause] dissoc :stack-trace)
-                 (update-in [:cause :cause] dissoc :stack-trace))
+               (helpers/remove-stacktrace e)
                {:type "exception-info",
                 :class "cljs.core.ExceptionInfo",
                 :message "LEVEL1",
@@ -163,8 +154,8 @@
          (is
            (=
              (-> e
-               (dissoc :stack-trace)
-               (update-in [:data] map?))
+              (helpers/remove-stacktrace)
+              (update :data map?))
              {:type "exception-info"
               :class "cljs.core.ExceptionInfo"
               :message ":malli.core/coercion"
