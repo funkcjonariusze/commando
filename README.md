@@ -19,6 +19,7 @@
 	- [command-fn-spec](#command-fn-spec)
 	- [command-apply-spec](#command-apply-spec)
 	- [command-mutation-spec](#command-mutation-spec)
+	- [command-macro-spec](#command-macro-spec)
   - [Adding New Commands](#adding-new-commands)
 - [Status-Map and Internals](#status-map-and-internals)
   - [Debugging commando](#debugging-commando)
@@ -133,12 +134,12 @@ The `:commando/from` command supports relative paths like `"../"`, `"./"` for ac
   [commands-builtin/command-from-spec]
   {"incrementing 1"
    {"1" 1
-	"2" {:commando/from ["../" "1"] := inc}
-	"3" {:commando/from ["../" "2"] := inc}}
+    "2" {:commando/from ["../" "1"] := inc}
+    "3" {:commando/from ["../" "2"] := inc}}
    "decrementing 1"
    {"1" 1
-	"2" {:commando/from ["../" "1"] := dec}
-	"3" {:commando/from ["../" "2"] := dec}}})
+    "2" {:commando/from ["../" "1"] := dec}
+    "3" {:commando/from ["../" "2"] := dec}}})
 ;; =>
 ;;  {"incrementing 1" {"1" 1, "2" 2, "3" 3},
 ;;   "decrementing 1" {"1" 1, "2" 0, "3" -1}}
@@ -161,9 +162,9 @@ A convenient wrapper over `apply`.
    "v2" 2
    "sum="
    {:commando/fn +
-    :args [{:commando/from ["v1"]}
-           {:commando/from ["v2"]}
-	       3]}})
+	:args [{:commando/from ["v1"]}
+		   {:commando/from ["v2"]}
+		   3]}})
 ;; => {"v1" 1 "v2" 2 "sum=" 6}
 ```
 
@@ -175,13 +176,13 @@ A wrapper similar to `commando/fn`, but conceptually closer to `commando/from`, 
 (commando/execute
   [commands-builtin/command-apply-spec]
   {"0" {:commando/apply
-	{"1" {:commando/apply
-	      {"2" {:commando/apply
-		    {"3" {:commando/apply {"4" {:final "5"}}
-			  := #(get % "4")}}
-		    := #(get % "3")}}
-	      := #(get % "2")}}
-	:= #(get % "1")}})
+        {"1" {:commando/apply
+              {"2" {:commando/apply
+                    {"3" {:commando/apply {"4" {:final "5"}}
+                          := #(get % "4")}}
+                    := #(get % "3")}}
+              := #(get % "2")}}
+        := #(get % "1")}})
 ;; => {"0" {:final "5"}}
 ```
 
@@ -194,19 +195,19 @@ Imagine the following instruction is your initial database migration, adding use
   [commands-builtin/command-from-spec
    commands-builtin/command-mutation-spec]
   {"add-new-user-01" {:commando/mutation :add-user :name "Bob Anderson"
-		              :permissions [{:commando/from ["perm_send_mail"] := :id}
-                      {:commando/from ["perm_recv_mail"] := :id }]}
+					  :permissions [{:commando/from ["perm_send_mail"] := :id}
+					  {:commando/from ["perm_recv_mail"] := :id }]}
    "add-new-user-02" {:commando/mutation :add-user :name "Damian Nowak"
-                      :permissions [{:commando/from ["perm_recv_mail"] := :id}]}
+					  :permissions [{:commando/from ["perm_recv_mail"] := :id}]}
    "perm_recv_mail" {:commando/mutation :add-permission
-                     :name "receive-email-notification"}
+					 :name "receive-email-notification"}
    "perm_send_mail" {:commando/mutation :add-permission
-	                 :name "send-email-notification"}})
+					 :name "send-email-notification"}})
 ```
 
 You can see that you need both :add-permission and :add-user commands. In most cases, such patterns can be abstracted and reused, simplifying your migrations and business logic.
 
-`commando-mutation-spec` uses `defmethod commando/command-mutation` underneath, making it easy to wrap business logic into commands and integrate them into your instructions/migrations:
+`commando-mutation-spec` uses `defmethod commando.commands.builtin/command-mutation` underneath, making it easy to wrap business logic into commands and integrate them into your instructions/migrations:
 
 ```clojure
 (defmethod commands-builtin/command-mutation :add-user [_ {:keys [name permissions]}]
@@ -224,8 +225,64 @@ You can see that you need both :add-permission and :add-user commands. In most c
 
 This approach enables you to quickly encapsulate business logic into reusable commands, which can then be easily composed in your instructions or migrations.
 
+#### command-macro-spec
 
-### Adding new commands 
+Allows describing reusable command templates that are expanded into regular Commando commands at runtime. This is useful when you want to describe a pattern for building a complex command or a set of related commands without duplicating the same structure throughout an instruction
+
+Asume we have a Instruction what calculates mean.
+```clojure
+(commando/execute
+  [commands-builtin/command-from-spec
+   commands-builtin/command-apply-spec
+   commands-builtin/command-fn-spec]
+  {:= :result
+   :commando/apply
+   {:vector-of-numbers [1, 2, 3, 4, 5]
+	:result
+	{:fn (fn [& [vector-of-numbers]]
+		   (/ (reduce + 0 vector-of-numbers)
+			 (count vector-of-numbers)))
+	 :args [{:commando/from [:commando/apply :vector-of-numbers]}]}}})
+;; => 3
+```
+
+This works, but the structure is not very easy to read when repeated. When you need the same mean calculation many times, the instruction quickly grows and becomes hard to follow. A macro can help by encapsulating the pattern into a readable reusable shortcut.
+
+Define a macro
+
+```clojure
+(defmethod commands-builtin/command-macro :mean-calc [{vector-of-numbers :vector-of-numbers}]
+  {:= :result
+   :commando/apply
+   {:vector-of-numbers vector-of-numbers
+	:result
+	{:fn (fn [& [vector-of-numbers]]
+		   (/ (reduce + 0 vector-of-numbers)
+			 (count vector-of-numbers)))
+	 :args [{:commando/from [:commando/apply :vector-of-numbers]}]}}})
+
+
+(commando/execute
+  [commands-builtin/command-macro-spec
+   commands-builtin/command-from-spec
+   commands-builtin/command-apply-spec
+   commands-builtin/command-fn-spec]
+  {:v1 {:commando/macro :mean-calc :vector-of-numbers [1, 2, 3, 4, 5]}
+   :v2 {:commando/macro :mean-calc :vector-of-numbers [10, 22, 33]}
+   :v3 {:commando/macro :mean-calc :vector-of-numbers [7, 8, 1000, 1]}})
+;; =>
+;; {:v1 3
+;;  :v2 21.666
+;;  :v3 254}
+```
+
+command-macro-spec detects entries with `:commando/macro` and calls the multimethod `(defmethod) commands-builtin/command-macro` using the macro identifier (e.g. `:mean-calc`) and the parameter map from the instruction.
+
+The defmethod should return a Instruction. Commando will then treat that returned map as a fully separate instruction: dependencies (like `:commando/from`) are discovered inside the macro hierarchy.
+
+Use these macro handlers to hide repeated command structure and keep your instructions shorter and easier to read.
+
+### Adding new commands
 
 As you start using commando, you will start writing your own command specs to match your data needs.
 
@@ -256,9 +313,9 @@ Let's create a new command using a CommandMapSpec configuration map:
 {:type :CALC=
  :recognize-fn #(and (map? %) (contains? % :CALC=))
  :validate-params-fn (fn [m]
-				       (and
-					     (fn? (:CALC= m))
-    					 (not-empty (:ARGS m))))
+					   (and
+						 (fn? (:CALC= m))
+						 (not-empty (:ARGS m))))
  :apply (fn [_instruction _command m]
 			 (apply (:CALC= m) (:ARGS m)))
  :dependencies {:mode :all-inside}}
@@ -270,7 +327,7 @@ Let's create a new command using a CommandMapSpec configuration map:
 - `:apply` - the function that directly executes the command as params it receives whole instruction, command spec and as a last argument what was recognized by :cm/recognize
 - `:dependencies` - describes the type of dependency this command has. Commando supports three modes:
   - `{:mode :all-inside}` - the command scans itself for dependencies on other commands within its body.
-  - `{:mode :none}` - the command has no dependencies and can be evaluated whenever. 
+  - `{:mode :none}` - the command has no dependencies and can be evaluated whenever.
   - `{:mode :point :point-key :commando/from}` - allowing to be dependent anywhere in the instructions. Expects point-key which tells where is the dependency (commando/from as an example uses this)
 
 Now you can use it for more expressive operations like "summ=" and "multiply=" as shown below:
@@ -278,19 +335,19 @@ Now you can use it for more expressive operations like "summ=" and "multiply=" a
 ```clojure
 (def command-registry
   (commando/create-registry
-    [;; Add `:commando/from`
-     commands-builtin/command-from-spec
-     ;; Add `:CALC=` command to be handled
-     ;; inside instruction
-     {:type :CALC=
-      :recognize-fn #(and (map? %) (contains? % :CALC=))
-      :validate-params-fn (fn [m]
-                            (and
-                              (fn? (:CALC= m))
-                              (not-empty (:ARGS m))))
-      :apply (fn [_instruction _command m]
-                (apply (:CALC= m) (:ARGS m)))
-      :dependencies {:mode :all-inside}}]))
+	[;; Add `:commando/from`
+	 commands-builtin/command-from-spec
+	 ;; Add `:CALC=` command to be handled
+	 ;; inside instruction
+	 {:type :CALC=
+	  :recognize-fn #(and (map? %) (contains? % :CALC=))
+	  :validate-params-fn (fn [m]
+							(and
+							  (fn? (:CALC= m))
+							  (not-empty (:ARGS m))))
+	  :apply (fn [_instruction _command m]
+				(apply (:CALC= m) (:ARGS m)))
+	  :dependencies {:mode :all-inside}}]))
 
 (commando/execute
   command-registry
@@ -322,7 +379,7 @@ The concept of a **command** is not limited to map structures it is basically an
   [{:type :custom/json
 	:recognize-fn #(and (string? %) (clojure.string/starts-with? % "json"))
 	:apply (fn [_instruction _command-map string-value]
-              (clojure.data.json/read-str (apply str (drop 4 string-value))
+			  (clojure.data.json/read-str (apply str (drop 4 string-value))
 				:key-fn keyword))
 	:dependencies {:mode :none}}]
   {:json-command-1 "json{\"some-json-value-1\": 123}"
@@ -424,12 +481,12 @@ You can set dynamic variable `commando.impl.utils/*debug-mode* true` to see more
 
 (binding [commando-utils/*debug-mode* true]
   (execute
-    [commands-builtin/command-from-spec]
-    {"1" 1
-     "2" {:commando/from ["1"]}
-     "3" {:commando/from ["2"]}}))
-	 
-;; RETURN => 
+	[commands-builtin/command-from-spec]
+	{"1" 1
+	 "2" {:commando/from ["1"]}
+	 "3" {:commando/from ["2"]}}))
+
+;; RETURN =>
 {:status :ok,
  :instruction {"1" 1, "2" 1, "3" 1}
  :registry
@@ -474,7 +531,7 @@ You can set dynamic variable `commando.impl.utils/*debug-mode* true` to see more
 - [Commando QueryDSL](./doc/query_dsl.md)
 - [Example Http commando transit handler + Reitit](./doc/example_reitit.clj)
 
-# Versioning 
+# Versioning
 
 We comply with: [Break Versioning](https://www.taoensso.com/break-versioning)
 `<major>.<minor>.<non-breaking>[-<optional-qualifier>]`

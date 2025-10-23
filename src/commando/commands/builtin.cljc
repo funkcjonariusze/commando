@@ -95,9 +95,6 @@
 ;; From
 ;; ======================
 
-""
-
-
 (def
   ^{:doc "
   Description
@@ -464,3 +461,4 @@
                 (:instruction result)
                 (throw (ex-info (str utils/exception-message-header "command-macro. Failure execution :commando/macro") result)))))
    :dependencies {:mode :all-inside}})
+
