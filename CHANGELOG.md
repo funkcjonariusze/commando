@@ -4,6 +4,8 @@ ADDED documentation for commando.commands.builtin commands. Now each built-in co
 UPDATED upgrade commando.commands.query-dsl. Function `resolve-query` was removed and replaced by `resolve-fn`, `resolve-instruction`, `resolve-instructions-qe` function called a **resolvers**. Explanations about the resolvers added to _docs/query-dsl.md_ file.
 UPDATED error serialization. `commando.impl.utils` contains new way to serialize errors for CLJ/CLJS. Now all errors are serialized to map with keys: `:type`, `:class`, `:message`, `:data` (if exists) and `:stacktrace` (if exists), `:cause` (if exists). See `commando.impl.utils/serialize-error` for more information. You can expand the error handlers using `serialize-exception-fn` multimethod (but for CLJ only).
 ADDED tests for macro-spec, errors and query-dsl changes.
+UPDATED README.md 'Debugging section' was replaced on 'Configuring Execution Behavior' which contains more detailed information how to modify execution behavior.
+UPDATED dynamic variable *debug-mode* replaced by the `*execute-config*` which is a map that can contain multiple configuration options.
 
 # 1.0.3
 UPDATED behavior `:validate-params-fn`. If the function return anything except `true` it ment validation failure. If the function return data, they will be attached to returned error inside status map. Added tests.

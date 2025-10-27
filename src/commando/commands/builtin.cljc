@@ -361,8 +361,8 @@
     (defmethod command-macro :vector-dot-product [_macro-type {:keys [vector1-str vector2-str]}]
       {:= :dot-product
        :commando/apply
-       {:vector1-str [\"1\" \"2\" \"3\"]
-        :vector2-str [\"4\" \"5\" \"6\"]
+       {:vector1-str vector1-str
+        :vector2-str vector2-str
         ;; -------
         ;; Parsing
         :vector1
@@ -393,7 +393,7 @@
          {:commando/macro :vector-dot-product
           :vector1-str [\"10\" \"20\" \"30\"]
           :vector2-str [\"4\" \"5\" \"6\"]}}))
-     => {:vector-dot-1 32, :vector-dot-2 32}
+     => {:vector-dot-1 32, :vector-dot-2 320}
 
   See Also
      `commando.core/execute`
@@ -461,4 +461,3 @@
                 (:instruction result)
                 (throw (ex-info (str utils/exception-message-header "command-macro. Failure execution :commando/macro") result)))))
    :dependencies {:mode :all-inside}})
-

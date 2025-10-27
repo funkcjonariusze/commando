@@ -7,20 +7,37 @@
 ;; Dynamic Properties
 ;; ------------------
 
-(def ^:dynamic *debug-mode*
-  "When enabled, debug-stack-map functionality is active in find-commands*."
-  false)
+(def ^:private -execute-config-default
+  {:debug-result false
+   :error-data-string true})
+
+(def ^:dynamic
+  *execute-config*
+  "Dynamic configuration for `commando/execute` behavior.
+  - `:debug-result` (boolean): When true, adds additional execution
+     information to the returned status-map, aiding in instruction analysis.
+  - `:error-data-string` (boolean): When true, the `:data` key in
+     serialized `ExceptionInfo` (via `commando.impl.utils/serialize-exception`)
+     will be a string representation of the data. When false, it will return
+     the original map structure."
+  -execute-config-default)
+
+(defn execute-config
+  "Returns the effective configuration for `commando/execute`, getting data from dynamic variable `commando.impl.utils/*execute-config*`"
+  []
+  (merge -execute-config-default *execute-config*))
 
 (def ^{:dynamic true
        :private true
        :doc "For debugging purposes and some mysterious reason of setting it dynamically during execution"}
-     *command-map-spec-registry*
+  *command-map-spec-registry*
   nil)
 
 (defn command-map-spec-registry
   "For debugging purposes and some mysterious reason of setting it dynamically during execution"
   []
   (or *command-map-spec-registry* []))
+
 
 ;; ------------------
 ;; Function Resolvers
@@ -114,9 +131,9 @@
       :stack-trace    (stacktrace->vec-str t)
       :cause          (when-let [cause (.getCause t)]
                         (serialize-exception-fn cause))
-      :data           (if *debug-mode*
-                        (ex-data t)
-                        (pr-str (ex-data t)))}))
+      :data           (if (true? (:error-data-string (execute-config)))
+                        (pr-str (ex-data t))
+                        (ex-data t))}))
 
 #?(:clj
    (defmethod serialize-exception-fn :default [t]
@@ -152,9 +169,9 @@
         :stack-trace    (stacktrace->vec-str e)
         :cause          (when-let [cause (.-cause e)]
                           (serialize-exception-fn cause))
-        :data           (if *debug-mode*
-                          (.-data e)
-                          (pr-str (.-data e)))})))
+        :data           (if (true? (:error-data-string (execute-config)))
+                          (pr-str (.-data e))
+                          (.-data e))})))
 
 #?(:cljs
    (defmethod serialize-exception-fn :js-error [^js/Error e]

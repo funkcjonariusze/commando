@@ -84,7 +84,9 @@
                :data nil},
               :data "{:level \"1\"}"})))
 
-       (let [e (binding [sut/*debug-mode* true]
+       (let [e (binding [sut/*execute-config*
+                         {:debug-result false
+                          :error-data-string false}]
                  (try
                    (malli/assert :int "string")
                    (catch Exception e
@@ -146,7 +148,9 @@
                         :data "{}"}
                 :data "{}"})))
 
-       (let [e (binding [sut/*debug-mode* true]
+       (let [e (binding [sut/*execute-config*
+                         {:debug-result false
+                          :error-data-string false}]
                  (try
                    (malli/assert :int "string")
                    (catch :default e
@@ -198,3 +202,4 @@
        (is (= false (malli/validate sut/ResolvableFn 'UNKOWN)))
        (is (= false (malli/validate sut/ResolvableFn 'UNKOWN/UNKOWN)))
        )))
+

@@ -31,7 +31,9 @@
   (testing "Failure test cases"
     (is
       (helpers/status-map-contains-error?
-        (binding [commando-utils/*debug-mode* true]
+        (binding [commando-utils/*execute-config*
+                  {:debug-result false
+                   :error-data-string false}]
           (commando/execute [command-builtin/command-fn-spec]
             {:commando/fn "STRING"
              :args [[1 2 3] [3 2 1]]}))
@@ -48,7 +50,9 @@
       "Waiting on error, bacause commando/fn has wrong type for :commando/fn")
     (is
       (helpers/status-map-contains-error?
-        (binding [commando-utils/*debug-mode* true]
+        (binding [commando-utils/*execute-config*
+                  {:debug-result false
+                   :error-data-string false}]
           (commando/execute [command-builtin/command-fn-spec]
             {:commando/fn (fn [& [v1 v2]] (reduce + (map * v1 v2)))
              :args "BROKEN"}))
@@ -80,7 +84,9 @@
   (testing "Failure test cases"
     (is
       (helpers/status-map-contains-error?
-        (binding [commando-utils/*debug-mode* true]
+        (binding [commando-utils/*execute-config*
+                  {:debug-result false
+                   :error-data-string false}]
           (commando/execute [command-builtin/command-apply-spec]
             {:commando/apply {:value 1}
              := "STRING"}))
@@ -170,7 +176,9 @@
          :command {:commando/from ["UNEXISING"]}})
       "Waiting on error, bacause commando/from seding to unexising path")
     (is (helpers/status-map-contains-error?
-          (binding [commando-utils/*debug-mode* true]
+          (binding [commando-utils/*execute-config*
+                    {:debug-result false
+                     :error-data-string false}]
             (commando/execute
               [command-builtin/command-from-spec]
               {:commando/from "BROKEN"}))
@@ -183,7 +191,9 @@
                :reason {:commando/from ["commando/from should be a sequence path to value in Instruction: [:some 2 \"value\"]"]}})))
       "Waiting on error, ':validate-params-fn' for commando/from. Corrupted path \"BROKEN\" ")
     (is (helpers/status-map-contains-error?
-          (binding [commando-utils/*debug-mode* true]
+          (binding [commando-utils/*execute-config*
+                    {:debug-result false
+                     :error-data-string false}]
             (commando/execute
               [command-builtin/command-from-spec]
               {:v 1
@@ -227,7 +237,9 @@
   (testing "Failure test cases"
     (is
       (helpers/status-map-contains-error?
-        (binding [commando-utils/*debug-mode* true]
+        (binding [commando-utils/*execute-config*
+                  {:debug-result false
+                   :error-data-string false}]
           (commando/execute [command-builtin/command-mutation-spec]
             {:commando/mutation (fn [] "BROKEN")}))
         (fn [error]
@@ -239,7 +251,9 @@
       "Waiting on error, bacause commando/mutation has wrong type for :commando/mutation")
     (is
       (helpers/status-map-contains-error?
-        (binding [commando-utils/*debug-mode* true]
+        (binding [commando-utils/*execute-config*
+                  {:debug-result false
+                   :error-data-string false}]
           (commando/execute [command-builtin/command-mutation-spec]
             {:commando/mutation :dot-product
              :vector1 [1 "_" 3]
@@ -309,7 +323,9 @@
   (testing "Failure test cases"
     (is
       (helpers/status-map-contains-error?
-        (binding [commando-utils/*debug-mode* true]
+        (binding [commando-utils/*execute-config*
+                  {:debug-result false
+                   :error-data-string false}]
           (commando/execute [command-builtin/command-macro-spec]
             {:commando/macro (fn [])}))
         (fn [error]

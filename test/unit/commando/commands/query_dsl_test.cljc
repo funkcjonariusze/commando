@@ -497,7 +497,9 @@
     (is
      (helpers/status-map-contains-error?
       (get-in
-       (binding [commando-utils/*debug-mode* true]
+        (binding [commando-utils/*execute-config*
+                  {:debug-result false
+                   :error-data-string false}]
          (commando/execute
           registry
           {:commando/resolve :test-instruction-qe
@@ -517,7 +519,9 @@
     (is
      (helpers/status-map-contains-error?
       (get-in
-       (binding [commando-utils/*debug-mode* true]
+        (binding [commando-utils/*execute-config*
+                  {:debug-result false
+                   :error-data-string false}]
          (commando/execute
           registry
           {:commando/resolve :test-instruction-qe

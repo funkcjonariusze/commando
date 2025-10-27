@@ -22,7 +22,9 @@
 	- [command-macro-spec](#command-macro-spec)
   - [Adding New Commands](#adding-new-commands)
 - [Status-Map and Internals](#status-map-and-internals)
-  - [Debugging commando](#debugging-commando)
+  - [Configuring Execution Behavior](#configuring-execution-behavior)
+	- [`:debug-result`](#debug-result)
+	- [`:error-data-string`](#error-data-string)
 - [Integrations](#integrations)
 - [Versioning](#versioning)
 - [License](#license)
@@ -134,12 +136,12 @@ The `:commando/from` command supports relative paths like `"../"`, `"./"` for ac
   [commands-builtin/command-from-spec]
   {"incrementing 1"
    {"1" 1
-    "2" {:commando/from ["../" "1"] := inc}
-    "3" {:commando/from ["../" "2"] := inc}}
+	"2" {:commando/from ["../" "1"] := inc}
+	"3" {:commando/from ["../" "2"] := inc}}
    "decrementing 1"
    {"1" 1
-    "2" {:commando/from ["../" "1"] := dec}
-    "3" {:commando/from ["../" "2"] := dec}}})
+	"2" {:commando/from ["../" "1"] := dec}
+	"3" {:commando/from ["../" "2"] := dec}}})
 ;; =>
 ;;  {"incrementing 1" {"1" 1, "2" 2, "3" 3},
 ;;   "decrementing 1" {"1" 1, "2" 0, "3" -1}}
@@ -176,13 +178,13 @@ A wrapper similar to `commando/fn`, but conceptually closer to `commando/from`, 
 (commando/execute
   [commands-builtin/command-apply-spec]
   {"0" {:commando/apply
-        {"1" {:commando/apply
-              {"2" {:commando/apply
-                    {"3" {:commando/apply {"4" {:final "5"}}
-                          := #(get % "4")}}
-                    := #(get % "3")}}
-              := #(get % "2")}}
-        := #(get % "1")}})
+		{"1" {:commando/apply
+			  {"2" {:commando/apply
+					{"3" {:commando/apply {"4" {:final "5"}}
+						  := #(get % "4")}}
+					:= #(get % "3")}}
+			  := #(get % "2")}}
+		:= #(get % "1")}})
 ;; => {"0" {:final "5"}}
 ```
 
@@ -470,17 +472,26 @@ On unsuccessful execution (`:failed`), you get:
   #<CommandMapPath "root,1[_value]">]}
 ```
 
-### Debugging commando
+### Configuring Execution Behavior
 
-You can set dynamic variable `commando.impl.utils/*debug-mode* true` to see more details on how execution went.
+The `commando.impl.utils/*execute-config*` dynamic variable allows for fine-grained control over `commando/execute`'s behavior. You can bind this variable to a map containing the following configuration keys:
+
+- `:debug-result` (boolean)
+- `:error-data-string` (boolean)
+
+#### `:debug-result`
+
+When set to `true`, the returned status-map will include additional execution information, such as `:internal/cm-list`, `:internal/cm-dependency`, and `:internal/cm-running-order`. This helps in analyzing the instruction's execution flow.
+
+Here's an example of how to use `:debug-result`:
 
 ```clojure
 (require '[commando.core :as commando])
 (require '[commando.commands.builtin :as commands-builtin])
 (require '[commando.impl.utils :as commando-utils])
 
-(binding [commando-utils/*debug-mode* true]
-  (execute
+(binding [commando-utils/*execute-config* {:debug-result true}]
+  (commando/execute
 	[commands-builtin/command-from-spec]
 	{"1" 1
 	 "2" {:commando/from ["1"]}
@@ -517,11 +528,54 @@ You can set dynamic variable `commando.impl.utils/*debug-mode* true` to see more
   "root,3[from]"   #{"root,2[from]"}}}
 ```
 
-`:internal/cm-list` - a list of all recognized commands in an instruction. This list also contains the `_map`, `_value`, and the unmentioned `_vector` commands, which are not included in the registry. Commando includes several internal built-in commands that describe the _instruction's structure_. An _instruction_ is a composition of maps, their values, and vectors that represent its structure and help build a clear dependency graph. These commands are removed from the final output after this step.
+`:internal/cm-list` - a list of all recognized commands in an instruction. This list also contains the `_map`, `_value`, and the unmentioned `_vector` commands. Commando includes several internal built-in commands that describe the _instruction's structure_. An _instruction_ is a composition of maps, their values, and vectors that represent its structure and help build a clear dependency graph. These commands are removed from the final output after this step, but included in the compiled registry.
 
 `:internal/cm-dependency` - describes how parts of an _instruction_ depend on each other.
 
 `:internal/cm-running-order` - the correct order in which to execute commands.
+
+
+#### `:error-data-string`
+
+When `:error-data-string` is `true`, the `:data` key within serialized `ExceptionInfo` objects (processed by `commando.impl.utils/serialize-exception`) will contain a string representation of the exception's data. Conversely, if `false`, the `:data` key will hold the raw data structure (map). This setting is particularly useful for controlling the verbosity of error details, in example when examining Malli validation explanations etc.
+
+```clojure
+(def value
+  (commando/execute [commands-builtin/command-from-spec]
+    {"a" 10
+     "ref" {:commando/from "BROKEN"}}))
+(get-in value [:errors 0 :error])
+;; =>
+;; {:type "exception-info",
+;;  :class "clojure.lang.ExceptionInfo",
+;;  :message "Failed while validating params for :commando/from ...",
+;;  :stack-trace
+;;  [["commando.impl.finding_commands$instruction_command_spec$fn__14401" "invoke" "finding_commands.cljc" 65]
+;;   ["clojure.core$some" "invokeStatic" "core.clj" 2718]
+;;   ...
+;;   ...],
+;;  :cause nil,
+;;  :data "{:command-type :commando/from, :reason #:commando{:from [\"commando/from should be a sequence path to value in Instruction: [:some 2 \\\"value\\\"]\"]}, :path [\"ref\"], :value #:commando{:from \"BROKEN\"}}"}
+
+
+(def value
+  (binding [sut/*execute-config* {:error-data-string false}]
+    (commando/execute [commands-builtin/command-from-spec]
+      {"a" 10
+       "ref" {:commando/from "BROKEN"}})))
+(get-in value [:errors 0 :error])
+;; =>
+;; {:type "exception-info",
+;;  :class "clojure.lang.ExceptionInfo",
+;;  ...
+;;  ...
+;;  :data
+;;  {:command-type :commando/from,
+;;   :reason {:commando/from
+;;            ["commando/from should be a sequence path to value in Instruction: [:some 2 \"value\"]"]},
+;;   :path ["ref"],
+;;   :value {:commando/from "BROKEN"}}}
+```
 
 # Integrations
 
