@@ -82,13 +82,13 @@
       (let [current-path (first queue)
             remaining-paths (rest queue)
             current-value (get-in instruction current-path)
-            debug-stack (if utils/*debug-mode* (get debug-stack-map current-path (list)) (list))]
+            debug-stack (if (:debug-result (utils/execute-config)) (get debug-stack-map current-path (list)) (list))]
         (if-let [command-spec (instruction-command-spec command-registry current-value current-path)]
           (let [command (cm/->CommandMapPath
                          current-path
-                         (if utils/*debug-mode* (merge command-spec {:__debug_stack debug-stack}) command-spec))
+                         (if (:debug-result (utils/execute-config)) (merge command-spec {:__debug_stack debug-stack}) command-spec))
                 child-paths (command-child-paths command-spec current-value current-path)
-                updated-debug-stack-map (if utils/*debug-mode*
+                updated-debug-stack-map (if (:debug-result (utils/execute-config))
                                           (reduce #(assoc %1 %2 (conj debug-stack command)) debug-stack-map child-paths)
                                           {})]
             (recur (concat remaining-paths child-paths) (conj found-commands command) updated-debug-stack-map))

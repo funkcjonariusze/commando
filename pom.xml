@@ -4,7 +4,7 @@
   <packaging>jar</packaging>
   <groupId>org.clojars.funkcjonariusze</groupId>
   <artifactId>commando</artifactId>
-  <version>1.0.3</version>
+  <version>1.0.4</version>
   <name>commando</name>
   <dependencies>
     <dependency>
@@ -42,6 +42,6 @@
     <url>https://github.com/funkcjonariusze/commando</url>
     <connection>scm:git:git://github.com/funkcjonariusze/commando.git</connection>
     <developerConnection>scm:git:ssh://git@github.com:funkcjonariusze/commando.git</developerConnection>
-    <tag>1.0.3</tag>
+    <tag>1.0.4</tag>
   </scm>
 </project>

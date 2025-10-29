@@ -1,6 +1,5 @@
 (ns commando.core
   (:require
-   [commando.commands.builtin]
    [commando.impl.dependency       :as deps]
    [commando.impl.executing        :as executing]
    [commando.impl.finding-commands :as finding-commands]
@@ -160,9 +159,8 @@
                   (smap/status-map-handle-warning {:message (str utils/exception-message-header
                                                                  "build-compiler. Error building compiler")}))
       :ok (cond-> status-map
-            true (update-in [:registry] registry/detach-instruction-commands)
             true (update-in [:internal/cm-running-order] registry/remove-instruction-commands-from-command-vector)
-            (false? utils/*debug-mode*) (select-keys [:status :registry :internal/cm-running-order :successes :warnings])))))
+            (false? (:debug-result (utils/execute-config))) (select-keys [:status :registry :internal/cm-running-order :successes :warnings])))))
 
 (defn ^:private compiler->status-map
   "Cause compiler contains only two :registry and :internal/cm-running-order keys
@@ -172,7 +170,7 @@
            (contains? compiler :internal/cm-running-order)
            (contains? compiler :status))
     (case (:status compiler)
-      :ok (if (true? utils/*debug-mode*)
+      :ok (if (true? (:debug-result (utils/execute-config)))
             (-> (smap/status-map-pure compiler))
             (-> (smap/status-map-pure (select-keys compiler [:registry :internal/cm-running-order :successes :warnings]))))
       :failed compiler)
@@ -189,8 +187,8 @@
                                        (compiler->status-map (build-compiler registry-or-compiler instruction)))
                                      (assoc :instruction instruction))]
     (cond-> (execute-commands! status-map-with-compiler)
-      (false? utils/*debug-mode*) (dissoc :internal/cm-running-order)
-      (false? utils/*debug-mode*) (dissoc :registry))))
+      (false? (:debug-result (utils/execute-config))) (dissoc :internal/cm-running-order)
+      (false? (:debug-result (utils/execute-config))) (dissoc :registry))))
 
 (defn failed? [status-map] (smap/failed? status-map))
 (defn ok? [status-map] (smap/ok? status-map))

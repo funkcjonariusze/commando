@@ -1,12 +1,13 @@
 (ns commando.commands.query-dsl
   (:require
-   [commando.core       :as commando]
-   [commando.impl.utils :as commando-utils]
-   [malli.core          :as malli]
+   [commando.core            :as commando]
+   [commando.impl.status-map :as smap]
+   [commando.impl.utils      :as commando-utils]
+   [malli.core               :as malli]
    [malli.error]
    #?(:clj [clojure.pprint :as pprint])))
 
-(def ^:private exception-message-header (str commando-utils/exception-message-header "Graph Query. "))
+(def ^:private exception-message-header (str commando-utils/exception-message-header "QueryDSL. "))
 
 (defn ^:private conj-dup-error
   [coll obj]
@@ -118,78 +119,207 @@
            :expression-props {}}
           QueryExpression))
 
-(deftype ^:private QueryResolve [value Instruction]
+(deftype ^:private Resolver [resolver_type resolver_data]
   Object
   (toString ^String [_]
-    (str "#<QueryResolve>%s"
-      (pr-str {:default value
-               :instruction Instruction}))))
+    (str "#<Resolver> "
+      (case resolver_type
+        :instruction-qe (let [{:keys [default-value _instruction]} resolver_data]
+                          (pr-str {:type :instruction-qe :default default-value}))
+        :instruction (let [{:keys [default-value _instruction]} resolver_data]
+                       (pr-str {:type :instruction :default default-value}))
+        :fn (let [{:keys [default-value _fn-resolver]} resolver_data]
+              (pr-str {:type :fn :default default-value}))
+        (throw (ex-info "#<Resolver> Exception. Undefinied resolver type" {:resolver_type resolver_type}))))))
 
 #?(:clj
-   (do (defmethod print-method QueryResolve [obj ^java.io.Writer writer] (.write writer (pr-str (.toString obj))))
-       (defmethod pprint/simple-dispatch QueryResolve [obj] (print-method obj *out*))))
+   (do (defmethod print-method Resolver [obj ^java.io.Writer writer] (.write writer (pr-str (.toString obj))))
+       (defmethod pprint/simple-dispatch Resolver [obj] (print-method obj *out*))))
+
+(defn resolve-instruction-qe
+  "Take a default-value and Instruction with `:commando/resolve` command
+   on the top-level, and return Resolver object that will be processed
+   by `->query-run`
+
+   Example
+     (resolve-instruction-qe
+       []
+       {:commando/resolve :cars-by-model
+        :model \"Citroen\"}
 
 
-(defn query-resolve? [obj] (instance? QueryResolve obj))
-(defn query-resolve
-  "Take `default-value`, `Instruction`, and if QueryExpression ask for property, then
-   execute `Instruction`(internal ivoke of commanod/execute) and return the result,
-   otherwise return `default-value`
+   See Also
+     `commando.commands.query-dsl/->query-run`
+     `commando.commands.query-dsl/->resolve-instruction`
+         - the same but for any Instruction can execute your registry.
+     `commando.commands.query-dsl/->resolve-fn`
+         - the same but for simple function resolving"
+  [default-value InstructionWithQueryExpression]
+  (->Resolver :instruction-qe {:default-value default-value :instruction InstructionWithQueryExpression}))
 
-   [:value-covered-by-query-resolve] <- return `default-value`
-   [{:value-covered-by-query-resolve <- execute `Instruction` and lookup for `:SOME-VALUES`
-     [:SOME-VALUES]}]"
-  [default-value Instruction] (new QueryResolve default-value Instruction))
-(defn ^:private resolve-execute
-  [data QueryExpression QueryExpressionKeyProperties]
-  (if (query-resolve? data)
-    (let [patch-query (fn [query-resolve-instruction]
-                        (cond-> query-resolve-instruction
-                          true (assoc :QueryExpression QueryExpression)
-                          true (assoc "QueryExpression" QueryExpression)
-                          QueryExpressionKeyProperties (merge QueryExpressionKeyProperties)))
-          result (commando/execute
-                  (commando.impl.utils/command-map-spec-registry)
-                  (let [internal-instruction-to-execute (.-Instruction data)]
-                    (cond
-                      (map? internal-instruction-to-execute) (patch-query internal-instruction-to-execute)
-                      (vector? internal-instruction-to-execute) (mapv patch-query internal-instruction-to-execute)
-                      :else (throw (ex-info (str exception-message-header "Unsupported structure for internal resolving functionality") {:part internal-instruction-to-execute})))))]
-      (if (= :ok (:status result)) (:instruction result) result))
-    data))
-(defn ^:private return-values [data] (if (query-resolve? data) (.-value data) data))
+(defn resolve-instruction
+  "Take a default-value and Instruction that can be executed by commando
+   registry. Return Resolver object that will be processed by `->query-run`.
+
+   Example
+     (resolve-instruction
+       0
+       {:vector1 [1 2 3]
+        :vector2 [3 2 1]
+        :result {:commando/fn (fn [& [v1 v2]] (reduce + (map * v1 v2)))
+                 :args [{:commando/from [:vector1]}
+                        {:commando/from [:vector2]}]}})
+
+   See Also
+        `commando.commands.query-dsl/->query-run`
+        `commando.commands.query-dsl/->resolve-instruction-qe`
+            - the same but for Instruction with `:commando/resolve` command
+            on the top-level.
+        `commando.commands.query-dsl/->resolve-fn`
+            - the same but for simple function resolving"
+  [default-value Instruction]
+  (->Resolver :instruction {:default-value default-value :instruction Instruction}))
+
+(defn resolve-fn
+  "Take a default-value and fn-resolver - simple function that
+   can optionally accept KeyProperties(passed data from QueryExpression syntax) map
+   and return the data that can be queried by QueryExpression syntax
+   by commando registry. Return Resolver object that will be processed
+   by `->query-run`.
+
+   Example
+     (resolve-fn
+       []
+       (fn [{:keys [x]}]
+        (vec (for [i (range (or x 5))]
+               {:value i}))))
+
+   See Also
+    `commando.commands.query-dsl/->query-run`
+    `commando.commands.query-dsl/->resolve-instruction-qe`
+       - the same but for Instruction with `:commando/resolve` command
+       on the top-level.
+    `commando.commands.query-dsl/->resolve-instruction`
+       - the same but for any Instruction can execute your registry."
+  [default-value fn-resolver]
+  (->Resolver :fn {:default-value default-value :fn-resolver fn-resolver}))
+(defn resolver?
+  "Check is the obj a `commando.commands.query_dsl/Resolver` instance"
+  [obj] (instance? Resolver obj))
+
+(defn ^:private run-resolve-instruction-qe [resolver_data QueryExpression QueryExpressionKeyProperties]
+  (let [{:keys [_default-value instruction]} resolver_data
+        patch-query (fn [instruction]
+                      (cond-> instruction
+                        (contains? instruction :commando/resolve ) (assoc :QueryExpression QueryExpression)
+                        (contains? instruction "commando-resolve") (assoc "QueryExpression" QueryExpression)
+                        QueryExpressionKeyProperties (merge QueryExpressionKeyProperties)))
+        result (commando/execute
+                 (commando-utils/command-map-spec-registry)
+                 (cond
+                   (map? instruction) (patch-query instruction)
+                   (vector? instruction) (mapv patch-query instruction)
+                   :else (throw (ex-info (str exception-message-header "Unsupported structure for InstructionWithQueryExpression resolving functionality") {:instruction-qe instruction}))))]
+    (if (= :ok (:status result)) (:instruction result) result)))
+
+(defn ^:private run-resolve-instruction [resolver_data KeyProperties]
+  (let [{:keys [_default-value instruction]} resolver_data
+        patch-query (fn [instruction]
+                      (cond-> instruction
+                        KeyProperties (merge KeyProperties)))
+        result (commando/execute
+                 (commando-utils/command-map-spec-registry)
+                 (cond
+                   (map? instruction) (patch-query instruction)
+                   (vector? instruction) (mapv patch-query instruction)
+                   :else (throw (ex-info (str exception-message-header "Unsupported structure for Instruction resolving functionality") {:instruction instruction}))))]
+    (if (= :ok (:status result)) (:instruction result) result)))
+
+(defn ^:private run-resolve-fn [resolver_data KeyProperties]
+  (let [{:keys [_default-value fn-resolver]} resolver_data
+        result (commando/execute
+                 (commando-utils/command-map-spec-registry)
+                 (fn-resolver KeyProperties))]
+    (if (= :ok (:status result)) (:instruction result) result)))
+
+(defn ^:private trying-to-resolve [resolver QueryExpression QueryExpressionKeyProperties ->query-run internal-keys]
+  (if (resolver? resolver)
+    (let [resolver_type (.-resolver_type resolver)
+          resolver_data (.-resolver_data resolver)]
+      (case resolver_type
+        ;; :instruction-qe not need to loop with ->query-run to obtain the next QueryExpression values
+        ;; cause if the are another QueryExpression instruction inside, it has ->query-run by the end of it
+        :instruction-qe
+        (run-resolve-instruction-qe resolver_data QueryExpression QueryExpressionKeyProperties)
+        :instruction
+        (->query-run
+          (run-resolve-instruction resolver_data QueryExpressionKeyProperties)
+          internal-keys)
+        :fn
+        (->query-run
+          (try
+            (run-resolve-fn resolver_data QueryExpressionKeyProperties)
+            (catch #?(:clj Exception :cljs :default) e
+              (->
+                (smap/status-map-pure)
+                (smap/status-map-handle-error {:message (str exception-message-header "resolve-fn. Finished return exception")
+                                               :error (commando-utils/serialize-exception e)}))))
+          internal-keys)))
+    (->query-run resolver internal-keys)))
+
+(defn ^:private trying-to-value [maybe-resolver]
+  (if (resolver? maybe-resolver)
+    (:default-value (.-resolver_data maybe-resolver))
+    maybe-resolver))
 
 (defn ->query-run
   [m QueryExpression]
   (let [{:keys [expression-keys expression-values expression-props]} (QueryExpression->expand-first QueryExpression)]
-    (reduce (fn [acc k]
-              (if (contains? m k)
-                (let [key-properties (get expression-props k)
-                      internal-keys (get expression-values k)]
-                  (if internal-keys
-                    (assoc acc
-                           k
-                           (let [data (get m k)]
-                             (cond
-                               (map? data) (->query-run data internal-keys)
-                               (coll? data) (mapv #(-> %
-                                                    (resolve-execute internal-keys key-properties)
-                                                    (->query-run internal-keys)) data)
-                               :else (resolve-execute data internal-keys key-properties))))
-                    (assoc acc
-                           k
-                           (let [data (get m k)]
-                             (cond
-                               (map? data) data
-                               (coll? data) (mapv return-values data)
-                               :else (return-values data))))))
-                (assoc acc
-                       k
-                       {:status :failed
-                        :errors [{:message (str exception-message-header
-                                             "QueryExpression attribute '" k "' is unreachable")}]})))
-            {}
-            expression-keys)))
+    (cond
+
+      (and (map? m) (commando/failed? m)) m
+
+      (map? m)
+      (reduce (fn [acc k]
+                (if (contains? m k)
+                  ;; QE
+                  ;; [{[:key {:some-key-properties nil}]
+                  ;;   [:internal-key-1
+                  ;;    :internal-key-1]}]
+                  (let [key-properties (get expression-props k)
+                        internal-keys (get expression-values k)]
+                    (assoc acc k
+                      (if internal-keys
+                        ;; QE
+                        ;; [{:key
+                        ;;   [:internal-key-1
+                        ;;    :internal-key-1]}]
+                        (let [data (get m k)]
+                          (cond
+                            (map? data) (->query-run data internal-keys)
+                            (coll? data) (mapv #(trying-to-resolve % internal-keys key-properties ->query-run internal-keys) data)
+                            (resolver? data) (trying-to-resolve data internal-keys key-properties ->query-run internal-keys)
+                            :else data))
+                        ;; QE
+                        ;; [:key]
+                        (let [data (get m k)]
+                          (cond
+                            (map? data) (trying-to-value data)
+                            (coll? data) (mapv trying-to-value data)
+                            (resolver? data) (trying-to-value data)
+                            :else data)))))
+                  (assoc acc
+                    k
+                    {:status :failed
+                     :errors [{:message (str exception-message-header
+                                          "QueryExpression. Attribute '" k "' is unreachable.")}]})))
+        {}
+        expression-keys)
+
+      (coll? m)
+      (mapv (fn [e] (->query-run e QueryExpression)) m)
+
+      :else m)))
 
 (defn ->>query-run [QueryExpression m] (->query-run m QueryExpression))
 
@@ -240,12 +370,12 @@
        (-> {:first-name \"Adam\"
             :last-name \"Nowak\"
             :info {:age 25 :weight 70 :height 188}
-            :passport (query-resolve
+            :passport (resolve-instruction-qe
                         \"- no passport - \"
                         {:commando/resolve :query-passport
                          :first-name \"Adam\"
                          :last-name \"Nowak\"})
-            :password (query-resolve
+            :password (resolve-instruction
                         \"- no password - \"
                         {:commando/mutation :generate-password})}
          (->query-run QueryExpression)))
@@ -286,7 +416,7 @@
           :UNEXISTING {:status :failed, :errors [{:message \"Commando. Graph Query. QueryExpression attribute ':UNEXISTING' is unreachable\"}]}}
 
    Parts
-     `commando.commands.query-dsl/query-resolve` run internal call of `commando/execute`.
+     `commando.commands.query-dsl/resolve-instruction-qe` run internal call of `commando/execute`.
      `commando.commands.query-dsl/->query-run` trim query data according to passed QueryExpression
      `commando.commands.query-dsl/command-resolve` multimethod to declare resolvers.
 
@@ -351,14 +481,14 @@
        (-> {\"first-name\" \"Adam\"
             \"last-name\" \"Nowak\"
             \"info\" {\"age\" 25 \"weight\" 70 \"height\" 188}
-            \"passport\" (query-resolve
-                        \"- no passport - \"
-                        {\"commando-resolve\" \"query-passport\"
-                         \"first-name\" \"Adam\"
-                         \"last-name\" \"Nowak\"})
-            \"password\" (query-resolve
-                        \"- no password - \"
-                        {\"commando-mutation\" \"generate-password\"})}
+            \"passport\" (resolve-instruction-qe
+                           \"- no passport - \"
+                           {\"commando-resolve\" \"query-passport\"
+                            \"first-name\" \"Adam\"
+                            \"last-name\" \"Nowak\"})
+            \"password\" (resolve-instruction
+                           \"- no password - \"
+                           {\"commando-mutation\" \"generate-password\"})}
          (->query-run QueryExpression)))
 
 
@@ -401,7 +531,7 @@
                           :errors [{:message \"Commando. Graph Query. QueryExpression attribute 'UNEXISTING' is unreachable\"}]}}
 
    Parts
-     `commando.commands.query-dsl/query-resolve` run internal call of `commando/execute`.
+     `commando.commands.query-dsl/resolve-instruction-qe` run internal call of `commando/execute`.
      `commando.commands.query-dsl/->query-run` trim query data according to passed QueryExpression
      `commando.commands.query-dsl/command-resolve` multimethod to declare resolvers.
 
