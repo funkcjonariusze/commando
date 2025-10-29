@@ -98,7 +98,7 @@
 (def
   ^{:doc "
   Description
-    command-fn-spec - get value from another command or existing value
+    command-from-spec - get value from another command or existing value
     in Instruction. Path to another command is passed inside `:commando/from`
     key, optionally you can apply `:=` function/symbol/keyword to the result.
 
@@ -159,7 +159,7 @@
 
 (def ^{:doc "
   Description
-    command-fn-json-spec - get value from another command or existing value
+    command-from-json-spec - get value from another command or existing value
     in Instruction. Path to another command is passed inside `\"commando-from\"`
     key, optionally you can get value of object by using `\"=\"` key.
 
@@ -233,8 +233,8 @@
     To declare mutation create method of `command-mutation` multimethod
 
   Example
-    (defmethod commando.commands.builtin/command-mutation :generate-string [_ {:keys [lenght]}]
-      {:random-string (apply str (repeatedly (or lenght 10) #(rand-nth \"abcdefghijklmnopqrstuvwxyz0123456789\")))})
+    (defmethod commando.commands.builtin/command-mutation :generate-string [_ {:keys [length]}]
+      {:random-string (apply str (repeatedly (or length 10) #(rand-nth \"abcdefghijklmnopqrstuvwxyz0123456789\")))})
 
     (defmethod commando.commands.builtin/command-mutation :generate-number [_ {:keys [from to]}]
       {:random-number (let [bound (- to from)] (+ from (rand-int bound)))})
@@ -243,7 +243,7 @@
      (commando/execute
        [command-mutation-spec]
        {:a {:commando/mutation :generate-number :from 10 :to 20}
-        :b {:commando/mutation :generate-string :lenght 5}}))
+        :b {:commando/mutation :generate-string :length 5}}))
      => {:a {:random-number 14}, :b {:random-string \"5a379\"}}
 
    See Also
@@ -272,8 +272,8 @@
     To declare mutation create method of `command-mutation` multimethod
 
   Example
-    (defmethod commando.commands.builtin/command-mutation \"generate-string\" [_ {:strs [lenght]}]
-      {\"random-string\" (apply str (repeatedly (or lenght 10) #(rand-nth \"abcdefghijklmnopqrstuvwxyz0123456789\")))})
+    (defmethod commando.commands.builtin/command-mutation \"generate-string\" [_ {:strs [length]}]
+      {\"random-string\" (apply str (repeatedly (or length 10) #(rand-nth \"abcdefghijklmnopqrstuvwxyz0123456789\")))})
 
     (defmethod commando.commands.builtin/command-mutation \"generate-number\" [_ {:strs [from to]}]
       {\"random-number\" (let [bound (- to from)] (+ from (rand-int bound)))})
@@ -282,7 +282,7 @@
      (commando/execute
        [command-mutation-json-spec]
        {\"a\" {\"commando-mutation\" \"generate-number\" \"from\" 10 \"to\" 20}
-        \"b\" {\"commando-mutation\" \"generate-string\" \"lenght\" 5}}))
+        \"b\" {\"commando-mutation\" \"generate-string\" \"length\" 5}}))
       => {\"a\" {\"random-number\" 18}, \"b\" {\"random-string\" \"m3gj1\"}}
 
    See Also

@@ -2,7 +2,6 @@
   (:require
    #?(:cljs [cljs.test :refer [deftest is testing]]
       :clj [clojure.test :refer [deftest is testing]])
-   [clojure.set               :as set]
    [commando.test-helpers     :as helpers]
    [commando.impl.utils :as sut]
    [malli.core :as malli]))

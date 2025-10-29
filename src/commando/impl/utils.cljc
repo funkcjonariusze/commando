@@ -101,7 +101,20 @@
 
 #?(:clj (defn ^:private exception-dispatch-fn [e] (class e)))
 
-#?(:clj (defmulti serialize-exception-fn exception-dispatch-fn))
+#?(:clj (defmulti ^{:doc
+             "Multimethod for serializing exceptions to maps.
+Dispatch based on exception class
+To add custom serialization for your exception type:
+
+Example
+  (defmethod serialize-exception-fn ClassOfException [e]
+    {:type \"my-exception\"
+     :message (.getMessage e)
+     ...})
+
+See
+   `commando.impl.utils/serialize-exception`"}
+          serialize-exception-fn exception-dispatch-fn))
 
 #?(:clj
    (defmethod serialize-exception-fn java.lang.Throwable [^Throwable t]
@@ -158,20 +171,26 @@
      (if-let [stack (.-stack e)] (str stack) nil)))
 
 #?(:cljs
-   (defmulti serialize-exception-fn exception-dispatch-fn))
+   (defmulti ^{:doc
+        "Multimethod for serializing exceptions to maps.
+dispatch differentiate two type of exception. Not supposed
+to be extended in cljs
+
+See
+   `commando.impl.utils/serialize-exception`"}
+     serialize-exception-fn exception-dispatch-fn))
 
 #?(:cljs
    (defmethod serialize-exception-fn :cljs-exception-info [^cljs.core.ExceptionInfo e]
-     (let [cause (.-cause e)]
-       {:type           "exception-info"
-        :class          "cljs.core.ExceptionInfo"
-        :message        (.-message e)
-        :stack-trace    (stacktrace->vec-str e)
-        :cause          (when-let [cause (.-cause e)]
-                          (serialize-exception-fn cause))
-        :data           (if (true? (:error-data-string (execute-config)))
-                          (pr-str (.-data e))
-                          (.-data e))})))
+     {:type           "exception-info"
+      :class          "cljs.core.ExceptionInfo"
+      :message        (.-message e)
+      :stack-trace    (stacktrace->vec-str e)
+      :cause          (when-let [cause (.-cause e)]
+                        (serialize-exception-fn cause))
+      :data           (if (true? (:error-data-string (execute-config)))
+                        (pr-str (.-data e))
+                        (.-data e))}))
 
 #?(:cljs
    (defmethod serialize-exception-fn :js-error [^js/Error e]
@@ -183,7 +202,7 @@
       :data           nil}))
 
 #?(:cljs
-   (defmethod serialize-exception-fn :default [e]
+   (defmethod serialize-exception-fn :default [_e]
      nil))
 
 (defn serialize-exception

@@ -2,7 +2,7 @@
 <h1>Query DSL</h1>
 </div>
 
-The Commando Query DSL is a built-in, lightweight query mechanism. It serves as a simple alternative to more comprehensive solutions like GraphQL or Pathom3, but it is more primitive and requires you to define dependency resolution manually.
+The Commando Query DSL is a built-in, lightweight query mechanism. It serves as a simple alternative to more comprehensive solutions like GraphQL or Pathom3, but it is much simpler and requires you to define dependency resolution manually.
 
 Its primary purpose is to provide a way to:
 
@@ -27,7 +27,7 @@ Its primary purpose is to provide a way to:
 
 ## Core Concept
 
-The Query DSL is enabled by adding `commando.commands.query-dsl/command-resolve-spec` to your `(commando.core/execute [<spec>] <instruction>)` call.
+The Query DSL is enabled by adding `commando.commands.query-dsl/command-resolve-spec` to commando execute registry.
 
 You define your data "endpoints" by creating new methods for the `commando.commands.query-dsl/command-resolve` multimethod.
 

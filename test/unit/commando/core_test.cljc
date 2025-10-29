@@ -5,7 +5,6 @@
    [commando.commands.builtin :as cmds-builtin]
    [commando.core             :as commando]
    [commando.impl.command-map :as cm]
-   [commando.impl.utils       :as commando-utils]
    [commando.test-helpers     :as helpers]
    [malli.core                :as malli]))
 
