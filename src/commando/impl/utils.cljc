@@ -79,7 +79,8 @@
   (when hook
     (try
       (hook status-map)
-      (catch Exception e
+      (catch #?(:clj Exception
+                :cljs :default) e
         nil)))
   status-map)
 
