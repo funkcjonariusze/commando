@@ -33,10 +33,10 @@
 
 ```clojure
 ;; deps.edn with git
-{org.clojars.funkcjonariusze/commando {:mvn/version "1.0.4"}}
+{org.clojars.funkcjonariusze/commando {:mvn/version "1.0.5"}}
 
 ;; leiningen
-[org.clojars.funkcjonariusze/commando "1.0.4"]
+[org.clojars.funkcjonariusze/commando "1.0.5"]
 ```
 
 ## Quick Start
@@ -413,6 +413,9 @@ On successful execution (`:ok`), you get:
 ;; RETURN =>
 {:status :ok,
  :instruction {"1" 1, "2" 1, "3" 1}
+ :stats
+ [["execute-commands!" 95838   "95.838µs"]
+  ["execute"           1085471 "1.085471ms"]]
  :successes
  [{:message
    "Commando. parse-instruction-map. Entities was successfully collected"}
@@ -500,6 +503,13 @@ Here's an example of how to use `:debug-result`:
 ;; RETURN =>
 {:status :ok,
  :instruction {"1" 1, "2" 1, "3" 1}
+ :stats
+ [["use-registry"           111876 "111.876µs"]
+  ["find-commands"          303062 "303.062µs"]
+  ["build-deps-tree"        134049 "134.049µs"]
+  ["sort-commands-by-deps"  292206 "292.206µs"]
+  ["execute-commands!"       53762 "53.762µs"]
+  ["execute"               1074110 "1.07411ms"]]
  :registry
  [{:type               :commando/from,
    :recognize-fn       #function[commando.commands.builtin/fn],

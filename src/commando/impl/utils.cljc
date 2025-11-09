@@ -1,5 +1,6 @@
 (ns commando.impl.utils
-  (:require [malli.core :as malli]))
+  (:require [malli.core :as malli]
+            [clojure.string :as str]))
 
 (def exception-message-header "Commando. ")
 
@@ -9,7 +10,9 @@
 
 (def ^:private -execute-config-default
   {:debug-result false
-   :error-data-string true})
+   :error-data-string true
+   :hook-execute-end nil
+   :hook-execute-start nil})
 
 (def ^:dynamic
   *execute-config*
@@ -19,25 +22,82 @@
   - `:error-data-string` (boolean): When true, the `:data` key in
      serialized `ExceptionInfo` (via `commando.impl.utils/serialize-exception`)
      will be a string representation of the data. When false, it will return
-     the original map structure."
+     the original map structure.
+  - `:hook-execute-start` (fn [status-map]): if not nil, can run procedure
+     passed in value.
+  - `:hook-execute-end` (fn [status-map]): if not nil, can run procedure
+     passed in value.
+
+  Example
+    (binding [commando.impl.utils/*execute-config*
+              {:debug-result true
+               :error-data-string false
+               :hook-execute-start (fn [e] (println (:uuid e)))
+               :hook-execute-end (fn [e] (println (:uuid e) (:stats e)))}]
+       (commando.core/execute
+         [commando.commands.builtin/command-from-spec]
+         {\"1\" 1
+          \"2\" {:commando/from [\"1\"]}
+          \"3\" {:commando/from [\"2\"]}}))"
   -execute-config-default)
+
+(def ^:dynamic
+  *execute-internals*
+  "Dynamic variable to keep context information about the execution
+   setup.
+   - `:uuid` the unique name of execution, generated everytime the user
+     invoke `commando.core/execute`
+   - `:stack` in case of user use `commando.commands.builtin/command-macro-spec`,
+     or `commando.commands.query-dsl/command-resolve-json-spec` or any sort of
+     commands what invoking `commando.core/execute` inside of parent instruction
+     by simulation recursive call, the :stack key will store the invocation stack
+     in vector of :uuids"
+  {:uuid nil
+   :stack []})
+
+(defn -execute-internals-push
+  "Update *execute-internals* structure"
+  [uuid-execute-identifier]
+  (-> *execute-internals*
+    (assoc :uuid uuid-execute-identifier)
+    (update :stack conj uuid-execute-identifier)))
 
 (defn execute-config
   "Returns the effective configuration for `commando/execute`, getting data from dynamic variable `commando.impl.utils/*execute-config*`"
   []
   (merge -execute-config-default *execute-config*))
 
-(def ^{:dynamic true
-       :private true
-       :doc "For debugging purposes and some mysterious reason of setting it dynamically during execution"}
+(defn hook-process
+  "Function will handle a hooks passed from users.
+   Available hooks:
+    - `:hook-execute-start`,
+    - `:hook-execute-end`.
+
+   Read more:
+      `commando.impl.utils/*execute-config*`"
+  [status-map hook]
+  (when hook
+    (try
+      (hook status-map)
+      (catch Exception e
+        nil)))
+  status-map)
+
+(def ^:dynamic
   *command-map-spec-registry*
+  "Dynamic variable what keep the state of processed
+  `:registry` value from `status-map`"
   nil)
 
 (defn command-map-spec-registry
-  "For debugging purposes and some mysterious reason of setting it dynamically during execution"
-  []
-  (or *command-map-spec-registry* []))
+  "Return `:registry` value in dynamic scoupe.
+   Required to run `commando.core/execute` inside
+   of parent execute invocation.
 
+   See
+     `commando.core/execute`
+     `commando.core/execute-commands!`(binding)"
+  [] (or *command-map-spec-registry* []))
 
 ;; ------------------
 ;; Function Resolvers
@@ -85,6 +145,25 @@
                        :cljs "Expected a fn")}
     (fn [x]
       (some? (resolve-fn x)))]))
+
+;; -----------------
+;; Performance Tools
+;; -----------------
+
+(defn now
+  "Returns a high-resolution timestamp in nanoseconds."
+  []
+  #?(:clj  (System/nanoTime)
+     :cljs (* (.now js/performance) 1000000)))
+
+(defn format-time
+  "Formats a time `t` in nanoseconds to a string with units (ns, µs, ms, or s)."
+  [t]
+  (cond
+    (< t 1000) (str t "ns")
+    (< t 1000000) (str (float (/ t 1000)) "µs")
+    (< t 1000000000) (str (float (/ t 1000000)) "ms")
+    :else (str (float (/ t 1000000000)) "s")))
 
 ;; -----------
 ;; Error Tools

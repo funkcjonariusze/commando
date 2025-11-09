@@ -7,8 +7,8 @@
   "Returns child paths for regular collections that should be traversed."
   [value current-path]
   (cond
-    (map? value) (for [[k _v] value] (conj current-path k))
-    (coll? value) (for [[i _v] (map-indexed vector value)] (conj current-path i))
+    (map? value) (doall (map (fn [[k _v]] (conj current-path k)) (seq value)))
+    (coll? value) (doall (map (fn [i] (conj current-path i)) (range (count value))))
     :else []))
 
 (defmulti ^:private command-child-paths
@@ -74,13 +74,13 @@
 (defn find-commands
   "Traverses the instruction tree (BFS algo) and collects all commands defined by the registry."
   [instruction command-registry]
-  (loop [queue [[]]
+  (loop [queue (vec [[]])
          found-commands []
          debug-stack-map {}]
     (if (empty? queue)
       found-commands
       (let [current-path (first queue)
-            remaining-paths (rest queue)
+            remaining-paths (subvec queue 1)
             current-value (get-in instruction current-path)
             debug-stack (if (:debug-result (utils/execute-config)) (get debug-stack-map current-path (list)) (list))]
         (if-let [command-spec (instruction-command-spec command-registry current-value current-path)]
@@ -91,8 +91,9 @@
                 updated-debug-stack-map (if (:debug-result (utils/execute-config))
                                           (reduce #(assoc %1 %2 (conj debug-stack command)) debug-stack-map child-paths)
                                           {})]
-            (recur (concat remaining-paths child-paths) (conj found-commands command) updated-debug-stack-map))
+            (recur (into remaining-paths child-paths) (conj found-commands command) updated-debug-stack-map))
           ;; No match - traverse children if coll, skip if leaf
-          (recur (concat remaining-paths (coll-child-paths current-value current-path))
+          (recur (into remaining-paths (coll-child-paths current-value current-path))
                  found-commands
                  debug-stack-map))))))
+
