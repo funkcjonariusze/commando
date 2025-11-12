@@ -231,7 +231,6 @@
       (println (str indent "———" k))
       (when (:stats v)
         (flame-print-stats (:stats v) (str indent "   |")))
-      ;; рекурсивно обходимо вкладені map-и, крім :stats
       (doseq [[child-k child-v] v
               :when (map? child-v)]
         (when (not= child-k :stats)
@@ -347,11 +346,6 @@
           {:query-A
            [{:instruction-A [:a]}]}]}]}]})
 )
-
-
-
-
-
 
 ;; =====================================
 ;; BUILDING DEPENDECY COMPLEX TEST CASES
