@@ -13,16 +13,11 @@
     cm-list))
 
 (defn- get-all-nested-commands
-  "Recursively traverses a trie (or sub-trie) and returns a lazy sequence of all command objects found."
+  "Lazily traverses a trie.
+   Returns a lazy sequence of all command objects found."
   [trie]
-  (if-not (map? trie)
-    []
-    (lazy-seq
-     (let [command (::command trie)
-           children (dissoc trie ::command)]
-       (if command
-         (cons command (mapcat get-all-nested-commands (vals children)))
-         (mapcat get-all-nested-commands (vals children)))))))
+  (->> (tree-seq map? (fn [node] (vals (dissoc node ::command))) trie)
+       (keep ::command)))
 
 (defmulti find-command-dependencies
   "Finds command dependencies based on dependency-type.
