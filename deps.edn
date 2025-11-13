@@ -10,9 +10,8 @@
                        :patterns [".*-test$"]}
            ;;For local performance regression tests
            :performance
-           {:extra-deps {criterium/criterium {:mvn/version "0.4.6"}
-                         cljfreechart/cljfreechart {:mvn/version "0.2.0"}}
-            :main-opts ["-m" "commando.dependency-load-plots-test"]
+           {:extra-deps {cljfreechart/cljfreechart {:mvn/version "0.2.0"}}
+            :main-opts ["-m" "commando.core-perf-test"]
             :extra-paths ["test/perf"]}
            ;;Build jar
            :build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.10"}}
