@@ -438,7 +438,7 @@
      `commando.commands.builtin/command-macro`
      `commando.commands.builtin/command-macro-spec`"}
   command-macro-json-spec
-  {:type :commando/macro
+  {:type :commando/macro-json
    :recognize-fn #(and
                     (map? %)
                     (contains? % "commando-macro"))

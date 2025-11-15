@@ -9,8 +9,10 @@
                        :main-opts ["-m" "cljs-test-runner.main" "-d" "test/unit"]
                        :patterns [".*-test$"]}
            ;;For local performance regression tests
-           :dev {:extra-deps {criterium/criterium {:mvn/version "0.4.6"}}
-                 :extra-paths ["test/perf"]}
+           :performance
+           {:extra-deps {cljfreechart/cljfreechart {:mvn/version "0.2.0"}}
+            :main-opts ["-m" "commando.core-perf-test"]
+            :extra-paths ["test/perf"]}
            ;;Build jar
            :build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.10"}}
                    :ns-default build

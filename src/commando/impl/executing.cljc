@@ -37,3 +37,4 @@
         (if (:error execution-result)
           [current-instruction (:error execution-result)]
           (recur execution-result (rest remaining-commands)))))))
+

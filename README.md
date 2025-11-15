@@ -25,6 +25,7 @@
   - [Configuring Execution Behavior](#configuring-execution-behavior)
 	- [`:debug-result`](#debug-result)
 	- [`:error-data-string`](#error-data-string)
+  - [Performance](#performance)
 - [Integrations](#integrations)
 - [Versioning](#versioning)
 - [License](#license)
@@ -33,10 +34,10 @@
 
 ```clojure
 ;; deps.edn with git
-{org.clojars.funkcjonariusze/commando {:mvn/version "1.0.4"}}
+{org.clojars.funkcjonariusze/commando {:mvn/version "1.0.5"}}
 
 ;; leiningen
-[org.clojars.funkcjonariusze/commando "1.0.4"]
+[org.clojars.funkcjonariusze/commando "1.0.5"]
 ```
 
 ## Quick Start
@@ -413,6 +414,9 @@ On successful execution (`:ok`), you get:
 ;; RETURN =>
 {:status :ok,
  :instruction {"1" 1, "2" 1, "3" 1}
+ :stats
+ [["execute-commands!" 95838   "95.838µs"]
+  ["execute"           1085471 "1.085471ms"]]
  :successes
  [{:message
    "Commando. parse-instruction-map. Entities was successfully collected"}
@@ -500,6 +504,13 @@ Here's an example of how to use `:debug-result`:
 ;; RETURN =>
 {:status :ok,
  :instruction {"1" 1, "2" 1, "3" 1}
+ :stats
+ [["use-registry"           111876 "111.876µs"]
+  ["find-commands"          303062 "303.062µs"]
+  ["build-deps-tree"        134049 "134.049µs"]
+  ["sort-commands-by-deps"  292206 "292.206µs"]
+  ["execute-commands!"       53762 "53.762µs"]
+  ["execute"               1074110 "1.07411ms"]]
  :registry
  [{:type               :commando/from,
    :recognize-fn       #function[commando.commands.builtin/fn],
@@ -576,6 +587,48 @@ When `:error-data-string` is `true`, the `:data` key within serialized `Exceptio
 ;;   :path ["ref"],
 ;;   :value {:commando/from "BROKEN"}}}
 ```
+
+
+### Performance
+
+Commando is designed for high performance, using efficient algorithms for dependency resolution and command execution to process complex instructions swiftly.
+
+All benchmarks were conducted on an **Intel Core i9-13980HX**. The primary metric for performance is the number of dependencies within an instruction.
+
+#### Total Execution Time (Typical Workloads)
+
+The graph below illustrates the total execution time for instructions with a typical number of dependencies, ranging from 1,250 to 80,000. As you can see, the execution time scales linearly and remains in the low millisecond range, demonstrating excellent performance for common use cases.
+
+<div align="center">
+<img width="100%" src="./test/perf/commando/execute(normal) milisecs_x_deps.png">
+</div>
+
+#### Execution Step Analysis
+
+To provide deeper insight, we've broken down the execution into five distinct steps:
+1.  **use-registry**: Builds the command registry from the provided specs.
+2.  **find-commands**: Scans the instruction map to identify all command instances.
+3.  **build-deps-tree**: Constructs a Directed Acyclic Graph (DAG) of dependencies between commands.
+4.  **sort-commands-by-deps**: Sorts the commands based on the dependency graph to determine the correct execution order.
+5.  **execute-commands!**: Executes the commands in the resolved order.
+
+The following graphs show the performance of each step under both normal and extreme load conditions.
+
+**Normal Workloads (up to 80,000 dependencies)**
+
+Under normal conditions, each execution step completes in just a few milliseconds. The overhead of parsing, dependency resolution, and execution is minimal, ensuring a fast and responsive system.
+
+<div align="center">
+<img width="100%" src="./test/perf/commando/execute-steps(normal) milisecs_x_deps.png">
+</div>
+
+**Massive Workloads (up to 5,000,000 dependencies)**
+
+To test the limits of the library, we benchmarked it with instructions containing up to 5 million dependencies. The graph below shows that while the system scales, the `find-commands` (parsing) and `build-deps-tree` (dependency graph construction) phases become the primary bottlenecks. This demonstrates that the core execution remains fast, but performance at extreme scales is dominated by the initial analysis steps.
+
+<div align="center">
+<img width="100%" src="./test/perf/commando/execute-steps(massive dep grow) secs_x_deps.png">
+</div>
 
 # Integrations
 

@@ -1,9 +1,24 @@
 (ns commando.impl.status-map
   (:require
+   [commando.impl.utils :as utils]
    [malli.core :as malli]))
 
 (def ^:private status-map-message-schema
   [:map [:message [:string {:min 5}]]])
+
+;;;------
+;;; Stats
+;;;------
+
+(defn status-map-add-measurement
+  "Calculates the duration from `start-time-ns` and `end-time-ns` and appends it as a tuple
+   `[stat-key duration-ns formatted-duration]` to the `:stats` vector in the `status-map`."
+  [status-map stat-key start-time-ns end-time-ns]
+  (let [duration (- end-time-ns start-time-ns)]
+    (update status-map :stats (fnil conj [])
+      [stat-key
+       duration
+       (utils/format-time duration)])))
 
 (defn status-map-handle-warning
   [status-map m]
@@ -22,10 +37,12 @@
 (defn status-map-pure
   ([] (status-map-pure nil))
   ([m]
-   (merge {:status :ok
+   (merge {:uuid (:uuid utils/*execute-internals*)
+           :status :ok
            :errors []
            :warnings []
-           :successes []}
+           :successes []
+           :stats []}
      m)))
 
 (defn status-map-undefined-status
@@ -36,3 +53,5 @@
 (defn failed? [status-map] (= (:status status-map) :failed))
 
 (defn ok? [status-map] (= (:status status-map) :ok))
+
+
