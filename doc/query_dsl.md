@@ -619,9 +619,9 @@ Because the Query DSL is built on Commando, you can easily combine it with other
   :option/color "crystal red"})
 ```
 
-### Working with JSON
+### Working with Strings
 
-To work with JSON input (e.g. from an HTTP request), use the command-resolve-json-spec command. Use string keys to describe Instructions (instead `:commando/resolve` use `"commando-resolve"`) and QueryExpressions.
+To work with JSON input (e.g. from an HTTP request), use string keys to describe Instructions (instead `:commando/resolve` use `"commando-resolve"`) and QueryExpressions(also with string keys).
 
 Note that defmethod dispatches on a string ("instant-car-model") and the parameters map (:strs [QueryExpression]) uses string-based destructuring. Cause QueryExpression uses strings, the resolvers must also use string keys in their returned maps.
 
@@ -638,7 +638,7 @@ Note that defmethod dispatches on a string ("instant-car-model") and the paramet
 	QueryExpression))
 
 (commando.core/execute
-  [commando.commands.query-dsl/command-resolve-json-spec]
+  [commando.commands.query-dsl/command-resolve-spec]
   (clojure.data.json/read-str
 	"{\"commando-resolve\":\"instant-car-model\",
 	  \"QueryExpression\":

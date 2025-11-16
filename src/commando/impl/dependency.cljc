@@ -98,10 +98,14 @@
 (defn point-target-path
   "Returns the target path for a :point dependency, resolving relative navigation."
   [instruction command-path-obj]
-  (let [point-key (get-in (cm/command-data command-path-obj) [:dependencies :point-key])
+  (let [point-key-seq (get-in (cm/command-data command-path-obj) [:dependencies :point-key])
         command-path (cm/command-path command-path-obj)
         command-map (get-in instruction command-path)
-        pointed-path (get command-map point-key)]
+        pointed-path (reduce (fn [_ point-key]
+                               (when-let [pointed-path (get command-map point-key)]
+                                 (reduced pointed-path)))
+                       nil
+                       point-key-seq)]
     (->> pointed-path
       (resolve-relative-path command-path)
       vec)))

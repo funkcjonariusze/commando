@@ -103,7 +103,7 @@ Let's define CommandMapSpec for `:integrant/from`:
                    (ig/ref (:integrant/component-alias integrant-component))
                    (throw (ex-info "`:integrant/from` Exception. term pointing on something that not a `:integrant/component` term " term-data)))))
    :dependencies {:mode :point
-                     :point-key :integrant/from}})
+                  :point-key [:integrant/from]}})
 ```
 
 Just like Commando’s basic commands, you specify how to recognize a component reference, how to validate it, and what to produce on evaluation.

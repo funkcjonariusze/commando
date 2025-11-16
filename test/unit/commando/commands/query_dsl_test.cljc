@@ -76,142 +76,142 @@
 (deftest black-box-test-query
   (testing "Testing query on mock-data (permissions and users)"
     (is
-     (=
-      {:id 2,
-       :name "Peter Griffin",
-       :email "peter@mail.com",
-       :password "*********",
-       :permissions ["add-doc"]}
-      (:instruction
-       (commando.core/execute
-        registry
-        {:commando/resolve :query-user ;; resolver
-         :email "peter@mail.com"
-         :QueryExpression
-         [:id
-          :name
-          :email
-          :password
-          :permissions]})))
-     "Wrong resolving user and permisssions.")
+      (=
+        {:id 2,
+         :name "Peter Griffin",
+         :email "peter@mail.com",
+         :password "*********",
+         :permissions ["add-doc"]}
+        (:instruction
+         (commando.core/execute
+           registry
+           {:commando/resolve :query-user ;; resolver
+            :email "peter@mail.com"
+            :QueryExpression
+            [:id
+             :name
+             :email
+             :password
+             :permissions]})))
+      "Wrong resolving user and permisssions.")
 
     (is
-     (=
-      {:id 2,
-       :name "Peter Griffin",
-       :email "peter@mail.com",
-       :password "*********",
-       :permissions
-       [{:permission-name "add-doc",
-         :options [{:type "pdf"} {:type "rtf"} {:type "odt"}]}]}
-      (:instruction
-       (commando.core/execute
-        registry
-        {:commando/resolve :query-user
-         :email "peter@mail.com"
-         :QueryExpression
-         [:id
-          :name
-          :email
-          :password
-          {:permissions
-           [:permission-name
-            {:options
-             [:type]}]}]})))
-     "Test user query with nested and joined permission data. Should return only needed value :type from nested map")
+      (=
+        {:id 2,
+         :name "Peter Griffin",
+         :email "peter@mail.com",
+         :password "*********",
+         :permissions
+         [{:permission-name "add-doc",
+           :options [{:type "pdf"} {:type "rtf"} {:type "odt"}]}]}
+        (:instruction
+         (commando.core/execute
+           registry
+           {:commando/resolve :query-user
+            :email "peter@mail.com"
+            :QueryExpression
+            [:id
+             :name
+             :email
+             :password
+             {:permissions
+              [:permission-name
+               {:options
+                [:type]}]}]})))
+      "Test user query with nested and joined permission data. Should return only needed value :type from nested map")
 
     (is
-     (=
-      {:id 2,
-       :name "Peter Griffin"
-       :UNEXISTING-FIELD {:status :failed,
-                          :errors [{:message "Commando. QueryDSL. QueryExpression. Attribute ':UNEXISTING-FIELD' is unreachable."}]}}
-      (:instruction
-       (commando.core/execute
-        registry
-        {:commando/resolve :query-user
-         :email "peter@mail.com"
-         :QueryExpression
-         [:id
-          :name
-          :UNEXISTING-FIELD]})))
-     "Test query for a non-existent attribute on a user. The resolver should return an error map for the unreachable field.")
+      (=
+        {:id 2,
+         :name "Peter Griffin"
+         :UNEXISTING-FIELD {:status :failed,
+                            :errors [{:message "Commando. QueryDSL. QueryExpression. Attribute ':UNEXISTING-FIELD' is unreachable."}]}}
+        (:instruction
+         (commando.core/execute
+           registry
+           {:commando/resolve :query-user
+            :email "peter@mail.com"
+            :QueryExpression
+            [:id
+             :name
+             :UNEXISTING-FIELD]})))
+      "Test query for a non-existent attribute on a user. The resolver should return an error map for the unreachable field.")
 
     (is
-     (=
-      {:id 3,
-       :name "Lois Griffin",
-       :email "lois@yahoo.net",
-       :password "********",
-       :user-role
-       {:status :failed,
-        :errors
-        [{:message
-          "Commando. QueryDSL. QueryExpression. Attribute ':user-role' is unreachable."}]}}
-      (:instruction
-       (commando.core/execute
-        registry
-        {:commando/resolve :query-user
-         :email "lois@yahoo.net"
-         :QueryExpression
-         [:id
-          :name
-          :email
-          :password
-          {:user-role
-           [:id
-            :permission-name]}]})))
-     "Test user with a mismatched :user-role key in the DB. The resolver should return error.")
+      (=
+        {:id 3,
+         :name "Lois Griffin",
+         :email "lois@yahoo.net",
+         :password "********",
+         :user-role
+         {:status :failed,
+          :errors
+          [{:message
+            "Commando. QueryDSL. QueryExpression. Attribute ':user-role' is unreachable."}]}}
+        (:instruction
+         (commando.core/execute
+           registry
+           {:commando/resolve :query-user
+            :email "lois@yahoo.net"
+            :QueryExpression
+            [:id
+             :name
+             :email
+             :password
+             {:user-role
+              [:id
+               :permission-name]}]})))
+      "Test user with a mismatched :user-role key in the DB. The resolver should return error.")
 
     (is
-     (=
-      {:id 2,
-       :name "Peter Griffin",
-       :email "peter@mail.com",
-       :password "*********",
-       :permissions [{:id 3, :permission-name "none", :options []}]}
-      (:instruction
-       (commando.core/execute
-        registry
-        {:commando/resolve :query-user
-         :email "peter@mail.com"
-         :QueryExpression
-         [:id
-          :name
-          :email
-          :password
-          {[:permissions {:permission-name "none"}]
-           [:id
-            :permission-name
-            :options]}]})))
-     "Test parameterized query. This EQL query should override the default join logic and query for a specific permission, even one the user does not have.")
+      (=
+        {:id 2,
+         :name "Peter Griffin",
+         :email "peter@mail.com",
+         :password "*********",
+         :permissions [{:id 3, :permission-name "none", :options []}]}
+        (:instruction
+         (commando.core/execute
+           registry
+           {:commando/resolve :query-user
+            :email "peter@mail.com"
+            :QueryExpression
+            [:id
+             :name
+             :email
+             :password
+             {[:permissions {:permission-name "none"}]
+              [:id
+               :permission-name
+               :options]}]})))
+      "Test parameterized query. This EQL query should override the default join logic and query for a specific permission, even one the user does not have.")
 
     (is
-     (=
-      {:id 3
-       :permission-name "none"
-       :options []}
-      (:instruction
-       (commando.core/execute
-        registry
-        {:commando/resolve :query-permission
+      (=
+        {:id 3
          :permission-name "none"
-         :QueryExpression
-         [:id
-          :permission-name
-          :options]})))
-     "Test direct query for a permission that has an empty nested list (:options).")
+         :options []}
+        (:instruction
+         (commando.core/execute
+           registry
+           {:commando/resolve :query-permission
+            :permission-name "none"
+            :QueryExpression
+            [:id
+             :permission-name
+             :options]})))
+      "Test direct query for a permission that has an empty nested list (:options).")
 
     (is
-     (nil?
-      (:instruction
-       (commando.core/execute
-        registry
-        {:commando/resolve :query-user
-         :email "nonexistent@user.com"
-         :QueryExpression
-         [:id :name]})))
-     "Test query for a non-existent user. Result should be nil.")))
+      (nil?
+        (:instruction
+         (commando.core/execute
+           registry
+           {:commando/resolve :query-user
+            :email "nonexistent@user.com"
+            :QueryExpression
+            [:id :name]})))
+      "Test query for a non-existent user. Result should be nil.")))
 
 (defmethod command-query-dsl/command-resolve :test-instruction-qe [_ {:keys [x QueryExpression]}]
   (let [x (or x 10)]
@@ -277,264 +277,310 @@
                                            :x 1})}
         (command-query-dsl/->query-run QueryExpression))))
 
+(defmethod command-query-dsl/command-resolve "test-instruction-qe" [_ {:strs [x QueryExpression]}]
+  (let [x (or x 10)]
+    (-> {"map" {"a"
+                {"b" {"c" x}
+                 "d" {"c" (inc x)
+                      "f" (inc (inc x))}}}
+
+         "resolve-instruction-qe"
+         (command-query-dsl/resolve-instruction-qe
+           "default value for resolve-instruction-qe"
+           {"commando-resolve" "test-instruction-qe"
+            "x" 1})}
+      (command-query-dsl/->query-run QueryExpression))))
+
 (deftest query-expression-test
   (testing "Succesfull execution"
     (is
-     (=
-      {:string "Value"}
-      (:instruction
-       (commando/execute
-        registry
-        {:commando/resolve :test-instruction-qe
-         :x 1
-         :QueryExpression
-         [:string]})))
-     "Returns a single attribute :string for query.")
+      (=
+        {:string "Value"}
+        (:instruction
+         (commando/execute
+           registry
+           {:commando/resolve :test-instruction-qe
+            :x 1
+            :QueryExpression
+            [:string]})))
+      "Returns a single attribute :string for query.")
 
     (is
-     (=
-      {:string "Value",
-       :map {:a {:b {:c 1}, :d {:c 2, :f 3}}},
-       :coll [{:a {:b {:c 1}, :d {:c 2, :f 3}}}
-              {:a {:b {:c 1}, :d {:c 0, :f -1}}}],
-       :resolve-fn             "default value for resolve-fn",
-       :resolve-instruction    "default value for resolve-instruction",
-       :resolve-instruction-qe "default value for resolve-instruction-qe"}
-      (:instruction
-       (commando/execute
-        registry
-        {:commando/resolve :test-instruction-qe
-         :x 1
-         :QueryExpression
-         [;; simple data
-          :string
-          :map
-          :coll
-          ;; data from resolvers
-          :resolve-fn
-          :resolve-instruction
-          :resolve-instruction-qe]})))
-     "Returns defaults for queried data.")
+      (=
+        {:string "Value",
+         :map {:a {:b {:c 1}, :d {:c 2, :f 3}}},
+         :coll [{:a {:b {:c 1}, :d {:c 2, :f 3}}}
+                {:a {:b {:c 1}, :d {:c 0, :f -1}}}],
+         :resolve-fn             "default value for resolve-fn",
+         :resolve-instruction    "default value for resolve-instruction",
+         :resolve-instruction-qe "default value for resolve-instruction-qe"}
+        (:instruction
+         (commando/execute
+           registry
+           {:commando/resolve :test-instruction-qe
+            :x 1
+            :QueryExpression
+            [ ;; simple data
+             :string
+             :map
+             :coll
+             ;; data from resolvers
+             :resolve-fn
+             :resolve-instruction
+             :resolve-instruction-qe]})))
+      "Returns defaults for queried data.")
 
     (is
-     (=
-      {:string "Value",
-       :map {:a {:b {:c 20}}},
-       :coll [{:a {:b {:c 20}}} {:a {:b {:c 20}}}]}
-      (:instruction
-       (commando/execute
-        registry
-        {:commando/resolve :test-instruction-qe
-         :x 20
-         :QueryExpression
-         [:string
-          {:map
-           [{:a
-             [:b]}]}
-          {:coll
-           [{:a
-             [:b]}]}]})))
-     "Returns nested data by non-resolver data types.")
+      (=
+        {:string "Value",
+         :map {:a {:b {:c 20}}},
+         :coll [{:a {:b {:c 20}}} {:a {:b {:c 20}}}]}
+        (:instruction
+         (commando/execute
+           registry
+           {:commando/resolve :test-instruction-qe
+            :x 20
+            :QueryExpression
+            [:string
+             {:map
+              [{:a
+                [:b]}]}
+             {:coll
+              [{:a
+                [:b]}]}]})))
+      "Returns nested data by non-resolver data types.")
 
     (is
-     (=
-      {:resolve-fn [{:a {:b {:c 1}}}]}
-      (:instruction
-       (commando/execute
-        registry
-        {:commando/resolve :test-instruction-qe
-         :x 20
-         :QueryExpression
-         [{:resolve-fn
-           [{:a
-             [:b]}]}]})))
-     "Return data for resolver. The resolving procedure for 'resolve-fn'")
+      (=
+        {:resolve-fn [{:a {:b {:c 1}}}]}
+        (:instruction
+         (commando/execute
+           registry
+           {:commando/resolve :test-instruction-qe
+            :x 20
+            :QueryExpression
+            [{:resolve-fn
+              [{:a
+                [:b]}]}]})))
+      "Return data for resolver. The resolving procedure for 'resolve-fn'")
 
     (is
-     (=
-      {:resolve-fn
-       [{:a {:b {:c 1000}}}
-        {:a {:b {:c 1001}}}
-        {:a {:b {:c 1002}}}
-        {:a {:b {:c 1003}}}
-        {:a {:b {:c 1004}}}
-        {:a {:b {:c 1005}}}
-        {:a {:b {:c 1006}}}
-        {:a {:b {:c 1007}}}
-        {:a {:b {:c 1008}}}
-        {:a {:b {:c 1009}}}]}
-      (:instruction
-       (commando/execute
-        registry
-        {:commando/resolve :test-instruction-qe
-         :x 20
-         :QueryExpression
-         [{[:resolve-fn {:x 1000}]
-           [{:a
-             [:b]}]}]})))
-     "Return data for resolver and overriding it params. Resolving procedure for 'resolve-fn'")
+      (=
+        {:resolve-fn
+         [{:a {:b {:c 1000}}}
+          {:a {:b {:c 1001}}}
+          {:a {:b {:c 1002}}}
+          {:a {:b {:c 1003}}}
+          {:a {:b {:c 1004}}}
+          {:a {:b {:c 1005}}}
+          {:a {:b {:c 1006}}}
+          {:a {:b {:c 1007}}}
+          {:a {:b {:c 1008}}}
+          {:a {:b {:c 1009}}}]}
+        (:instruction
+         (commando/execute
+           registry
+           {:commando/resolve :test-instruction-qe
+            :x 20
+            :QueryExpression
+            [{[:resolve-fn {:x 1000}]
+              [{:a
+                [:b]}]}]})))
+      "Return data for resolver and overriding it params. Resolving procedure for 'resolve-fn'")
 
     (is
-     (=
-      {:coll-resolve-fn
-       [{:a {:b 100}}
-        {:a {:b 100}}
-        {:a {:b 100}}
-        {:a {:b 100}}
-        {:a {:b 100}}
-        {:a {:b 100}}
-        {:a {:b 100}}
-        {:a {:b 100}}
-        {:a {:b 100}}
-        {:a {:b 100}}]}
-      (:instruction
-       (commando/execute
-        registry
-        {:commando/resolve :test-instruction-qe
-         :QueryExpression
-         [{[:coll-resolve-fn {:x 100}]
-           [{:a
-             [:b]}]}]}))))
+      (=
+        {:coll-resolve-fn
+         [{:a {:b 100}}
+          {:a {:b 100}}
+          {:a {:b 100}}
+          {:a {:b 100}}
+          {:a {:b 100}}
+          {:a {:b 100}}
+          {:a {:b 100}}
+          {:a {:b 100}}
+          {:a {:b 100}}
+          {:a {:b 100}}]}
+        (:instruction
+         (commando/execute
+           registry
+           {:commando/resolve :test-instruction-qe
+            :QueryExpression
+            [{[:coll-resolve-fn {:x 100}]
+              [{:a
+                [:b]}]}]})))
+      "Overriding parameters for sequese of resolvers")
 
     (is
-     (=
-      {:resolve-instruction
-       [{:a {:b {:c 0}}}
-        {:a {:b {:c 1}}}]}
-      (:instruction
-       (commando/execute
-        registry
-        {:commando/resolve :test-instruction-qe
-         :x 20
-         :QueryExpression
-         [{:resolve-instruction
-           [{:a
-             [:b]}]}]}))))
+      (=
+        {:resolve-instruction
+         [{:a {:b {:c 0}}}
+          {:a {:b {:c 1}}}]}
+        (:instruction
+         (commando/execute
+           registry
+           {:commando/resolve :test-instruction-qe
+            :x 20
+            :QueryExpression
+            [{:resolve-instruction
+              [{:a
+                [:b]}]}]})))
+      "Resolving execution of custom Instruction(have to work like a commando/macro)")
 
     (is
-     (=
-      {:resolve-instruction
-       [{:a {:b {:c 0}}}
-        {:a {:b {:c 1}}}
-        {:a {:b {:c 2}}}
-        {:a {:b {:c 3}}}
-        {:a {:b {:c 4}}}]}
-      (:instruction
-       (commando/execute
-        registry
-        {:commando/resolve :test-instruction-qe
-         :x 20
-         :QueryExpression
-         [{[:resolve-instruction
-            {:args [5]}]
-           [{:a
-             [:b]}]}]}))))
+      (=
+        {:resolve-instruction
+         [{:a {:b {:c 0}}}
+          {:a {:b {:c 1}}}
+          {:a {:b {:c 2}}}
+          {:a {:b {:c 3}}}
+          {:a {:b {:c 4}}}]}
+        (:instruction
+         (commando/execute
+           registry
+           {:commando/resolve :test-instruction-qe
+            :x 20
+            :QueryExpression
+            [{[:resolve-instruction
+               {:args [5]}]
+              [{:a
+                [:b]}]}]})))
+      "Resolving execution of custom Instruction(have to work like a commando/macro) with overriding Instruction structure")
 
     (is
-     (=
-      {:resolve-instruction-qe {:map {:a {:b {:c 1}}}}}
-      (:instruction
-       (commando/execute
-        registry
-        {:commando/resolve :test-instruction-qe
-         :x 20
-         :QueryExpression
-         [{:resolve-instruction-qe
-           [{:map [{:a [:b]}]}]}]}))))
+      (=
+        {:resolve-instruction-qe {:map {:a {:b {:c 1}}}}}
+        (:instruction
+         (commando/execute
+           registry
+           {:commando/resolve :test-instruction-qe
+            :x 20
+            :QueryExpression
+            [{:resolve-instruction-qe
+              [{:map [{:a [:b]}]}]}]})))
+      "Recursion resolving of :test-instruction-qe through the key :resolve-instruction-qe")
 
     (is
-     (=
-      {:resolve-instruction-qe
-       {:map {:a {:b {:c 1}}},
-        :resolve-instruction-qe
-        {:map {:a {:b {:c 1000}}},
-         :resolve-instruction-qe
-         {:map {:a {:b {:c 10000000}}}}}}}
-      (:instruction
-       (commando/execute
-        registry
-        {:commando/resolve :test-instruction-qe
-         :x 1
-         :QueryExpression
-         [{:resolve-instruction-qe
-           [{:map [{:a
-                    [:b]}]}
-            {[:resolve-instruction-qe {:x 1000}]
-             [{:map [{:a
-                      [:b]}]}
-              {[:resolve-instruction-qe {:x 10000000}]
-               [{:map [{:a
-                        [:b]}]}]}]}]}]})))))
+      (=
+        {:resolve-instruction-qe
+         {:map {:a {:b {:c 1}}},
+          :resolve-instruction-qe
+          {:map {:a {:b {:c 1000}}},
+           :resolve-instruction-qe
+           {:map {:a {:b {:c 10000000}}}}}}}
+        (:instruction
+         (commando/execute
+           registry
+           {:commando/resolve :test-instruction-qe
+            :x 1
+            :QueryExpression
+            [{:resolve-instruction-qe
+              [{:map [{:a
+                       [:b]}]}
+               {[:resolve-instruction-qe {:x 1000}]
+                [{:map [{:a
+                         [:b]}]}
+                 {[:resolve-instruction-qe {:x 10000000}]
+                  [{:map [{:a
+                           [:b]}]}]}]}]}]})))
+      "Recursive resolving and overriding of :test-instruction-qe resolver through the key :resolve-instruction-qe")
+
+    (is
+      (=
+        {"resolve-instruction-qe"
+         {"map" {"a" {"b" {"c" 1}}},
+          "resolve-instruction-qe"
+          {"map" {"a" {"b" {"c" 1000}}},
+           "resolve-instruction-qe"
+           {"map" {"a" {"b" {"c" 10000000}}}}}}}
+        (:instruction
+         (commando/execute
+           registry
+           {"commando-resolve" "test-instruction-qe"
+            "x" 1
+            "QueryExpression"
+            [{"resolve-instruction-qe"
+              [{"map" [{"a"
+                       ["b"]}]}
+               {["resolve-instruction-qe" {"x" 1000}]
+                [{"map" [{"a"
+                         ["b"]}]}
+                 {["resolve-instruction-qe" {"x" 10000000}]
+                  [{"map" [{"a"
+                           ["b"]}]}]}]}]}]})))
+      "Recursive resolving and overriding of \"test-instruction-qe\" resolver through the key \"resolve-instruction-qe\". Case with using string keys either keywords"))
 
   (testing "Failing exception"
     (is
-     (=
-      {:EEE
-       {:status :failed,
-        :errors
-        [{:message
-          "Commando. QueryDSL. QueryExpression. Attribute ':EEE' is unreachable."}]},
-       :resolve-fn
-       [{:a
-         {:b {:c 1},
-          :EEE
-          {:status :failed,
-           :errors
-           [{:message
-             "Commando. QueryDSL. QueryExpression. Attribute ':EEE' is unreachable."}]}}}]}
-      (:instruction
-       (commando/execute
-        registry
-        {:commando/resolve :test-instruction-qe
-         :x 20
-         :QueryExpression
-         [:EEE
-          {:resolve-fn
-           [{:a
-             [:b
-              :EEE]}]}]}))))
+      (=
+        {:EEE
+         {:status :failed,
+          :errors
+          [{:message
+            "Commando. QueryDSL. QueryExpression. Attribute ':EEE' is unreachable."}]},
+         :resolve-fn
+         [{:a
+           {:b {:c 1},
+            :EEE
+            {:status :failed,
+             :errors
+             [{:message
+               "Commando. QueryDSL. QueryExpression. Attribute ':EEE' is unreachable."}]}}}]}
+        (:instruction
+         (commando/execute
+           registry
+           {:commando/resolve :test-instruction-qe
+            :x 20
+            :QueryExpression
+            [:EEE
+             {:resolve-fn
+              [{:a
+                [:b
+                 :EEE]}]}]})))
+      "Resolving is sucessfull by itself, but the Unexisting keys return errors.")
 
     (is
-     (helpers/status-map-contains-error?
-      (get-in
-        (binding [commando-utils/*execute-config*
-                  {:debug-result false
-                   :error-data-string false}]
-         (commando/execute
-          registry
-          {:commando/resolve :test-instruction-qe
-           :x 20
-           :QueryExpression
-           [{:resolve-fn-error
-             [:a]}]}))
-       [:instruction :resolve-fn-error])
-      (fn [error]
-        (=
-         {:type "exception-info",
-          :message "Exception"
-          :cause nil,
-          :data {:error "no reason"}}
-         (-> error :error helpers/remove-stacktrace (dissoc :class))))))
+      (helpers/status-map-contains-error?
+        (get-in
+          (binding [commando-utils/*execute-config*
+                    {:debug-result false
+                     :error-data-string false}]
+            (commando/execute
+              registry
+              {:commando/resolve :test-instruction-qe
+               :x 20
+               :QueryExpression
+               [{:resolve-fn-error
+                 [:a]}]}))
+          [:instruction :resolve-fn-error])
+        (fn [error]
+          (=
+            {:type "exception-info",
+             :message "Exception"
+             :cause nil,
+             :data {:error "no reason"}}
+            (-> error :error helpers/remove-stacktrace (dissoc :class)))))
+      "throwed Exception inside of `:test-instruction-qe` catched as a normal status-map exceptionn")
 
     (is
-     (helpers/status-map-contains-error?
-      (get-in
-        (binding [commando-utils/*execute-config*
-                  {:debug-result false
-                   :error-data-string false}]
-         (commando/execute
-          registry
-          {:commando/resolve :test-instruction-qe
-           :x 20
-           :QueryExpression
-           [{:resolve-instruction-with-error
-             [{:a [:b]}]}]}))
-       [:instruction :resolve-instruction-with-error])
-      (fn [error]
-        (=
-         {:type "exception-info",
-          :message "Exception"
-          :cause nil,
-          :data {:error "no reason"}}
-         (-> error :error helpers/remove-stacktrace (dissoc :class))))))))
-
+      (helpers/status-map-contains-error?
+        (get-in
+          (binding [commando-utils/*execute-config*
+                    {:debug-result false
+                     :error-data-string false}]
+            (commando/execute
+              registry
+              {:commando/resolve :test-instruction-qe
+               :x 20
+               :QueryExpression
+               [{:resolve-instruction-with-error
+                 [{:a [:b]}]}]}))
+          [:instruction :resolve-instruction-with-error])
+        (fn [error]
+          (=
+            {:type "exception-info",
+             :message "Exception"
+             :cause nil,
+             :data {:error "no reason"}}
+            (-> error :error helpers/remove-stacktrace (dissoc :class)))))
+      "throwed Exception inside of internal resolver by key `:resolve-instruction-with-error` resolver catched as a normal status-map exception")))

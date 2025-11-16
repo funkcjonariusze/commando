@@ -1,40 +1,10 @@
 (ns commando.core-perf-test
   (:require
-   [commando.impl.utils]
+   [cljfreechart.core   :as cljfreechart]
    [commando.commands.builtin]
    [commando.commands.query-dsl]
    [commando.core]
-   [clojure.string :as str]
-   [cljfreechart.core :as cljfreechart]))
-
-;; =====================================
-;; PRINT UTILS
-;; =====================================
-
-(defn print-stats
-  "Prints a formatted summary of the execution stats from a status-map."
-  ([status-map]
-   (print-stats status-map nil))
-  ([status-map title]
-   (when-let [stats (:stats status-map)]
-     (let [max-key-len (apply max 0 (map (comp count name first) stats))]
-       (println (str "\nExecution Stats" (when title (str "(" title ")")) ":"))
-       (doseq [[index [stat-key _ formatted]] (map-indexed vector stats)]
-         (let [key-str (name stat-key)
-               padding (str/join "" (repeat (- max-key-len (count key-str)) " "))]
-           (println (str
-                      "  " (if (= "execute" key-str) "=" (str (inc index)) )
-                      "  " key-str " " padding formatted))))))))
-
-(comment
-  (print-stats
-    (commando.core/execute
-      [commando.commands.builtin/command-fn-spec
-       commando.commands.builtin/command-from-spec
-       commando.commands.builtin/command-apply-spec]
-      {"1" 1
-       "2" {:commando/from ["1"]}
-       "3" {:commando/from ["2"]}})))
+   [commando.impl.utils :as commando-utils]))
 
 ;; =======================================
 ;; AVERAGE EXECUTION OF REAL WORLD EXAMPLE
@@ -63,7 +33,7 @@
                            ~@body))
          avg-stats# (calculate-average-stats results#)]
      (print "Repeating instruction " ~n " times")
-     (print-stats avg-stats#)))
+     (commando-utils/print-stats avg-stats#)))
 
 (defn real-word-calculation-average-of-50 []
   (println "\n=====================Benchmark=====================")
@@ -217,45 +187,6 @@
 ;; FLAME FOR RECURSIVE INVOCATION
 ;; ==============================
 
-(defn ^:private flame-print-stats [stats indent]
-  (let [max-key-len (apply max 0 (map (comp count name first) stats))]
-    (doseq [[stat-key _ formatted] stats]
-      (let [key-str (name stat-key)
-            padding (clojure.string/join "" (repeat (- max-key-len (count key-str)) " "))]
-        (println (str indent
-                   "" key-str " " padding formatted))))))
-
-(defn ^:private flame-print [data & [indent]]
-  (let [indent (or indent "")]
-    (doseq [[k v] data]
-      (println (str indent "———" k))
-      (when (:stats v)
-        (flame-print-stats (:stats v) (str indent "   |")))
-      (doseq [[child-k child-v] v
-              :when (map? child-v)]
-        (when (not= child-k :stats)
-          (flame-print {child-k child-v} (str indent "   :")))))))
-
-(defn ^:private flamegraph [data]
-  (println "Printing Flamegraph for executes:")
-  (flame-print data))
-
-(defn ^:private execute-with-flame [registry instruction]
-  (let [stats-state (atom {})
-        result
-        (binding [commando.impl.utils/*execute-config*
-                  {; :debug-result true
-                   :hook-execute-end
-                   (fn [e]
-                     (swap! stats-state
-                       (fn [s]
-                         (update-in s (:stack commando.impl.utils/*execute-internals*)
-                           #(merge % {:stats (:stats e)})))))}]
-          (commando.core/execute
-            registry instruction))]
-    (flamegraph @stats-state)
-    result))
-
 (defmethod commando.commands.query-dsl/command-resolve :query-B [_ {:keys [x QueryExpression]}]
   (let [x (or x 10)]
     (-> {:map {:a
@@ -312,40 +243,40 @@
   (println "\n===================Benchmark=====================")
   (println "Run commando/execute in depth with using queryDSL")
   (println "=================================================")
-  (execute-with-flame
-    [commando.commands.query-dsl/command-resolve-spec
-     commando.commands.builtin/command-from-spec
-     commando.commands.builtin/command-fn-spec]
-    {:commando/resolve :query-A
-     :x 1
-     :QueryExpression
-     [{:map
-       [{:a
-         [:b]}]}
-      {:instruction-A [:a]}
-      {:query-A
-       [{:map
-         [{:a
-           [:b]}]}
-        {:query-A
-         [{:map
-           [{:a
-             [:b]}]}
-          {:query-A
-           [{:map
-             [{:a
-               [:b]}]}]}]}]}
-      {:query-B
-       [{:map
-         [{:a
-           [:b]}]}
-        {:query-A
-         [{:map
-           [{:a
-             [:b]}]}
-          {:query-A
-           [{:instruction-A [:a]}]}]}]}]})
-)
+  (commando-utils/print-deep-stats
+    #(commando.core/execute
+       [commando.commands.query-dsl/command-resolve-spec
+        commando.commands.builtin/command-from-spec
+        commando.commands.builtin/command-fn-spec]
+       {:commando/resolve :query-A
+        :x 1
+        :QueryExpression
+        [{:map
+          [{:a
+            [:b]}]}
+         {:instruction-A [:a]}
+         {:query-A
+          [{:map
+            [{:a
+              [:b]}]}
+           {:query-A
+            [{:map
+              [{:a
+                [:b]}]}
+             {:query-A
+              [{:map
+                [{:a
+                  [:b]}]}]}]}]}
+         {:query-B
+          [{:map
+            [{:a
+              [:b]}]}
+           {:query-A
+            [{:map
+              [{:a
+                [:b]}]}
+             {:query-A
+              [{:instruction-A [:a]}]}]}]}]})))
 
 ;; =====================================
 ;; BUILDING DEPENDECY COMPLEX TEST CASES
@@ -398,7 +329,7 @@
       (let [result (commando.core/execute
                      [commando.commands.builtin/command-from-spec]
                      instruction-builder)
-            stats-grouped (reduce (fn [acc [k v label]]
+            stats-grouped (reduce (fn [acc [k v _label]]
                                     (assoc acc k v))
                             {}
                             (:stats result))]
@@ -441,7 +372,7 @@
                               (assoc "dependecy-token" dependecy-token))))
                      instruction-stats-result)]
     (doseq [{:keys [dependecy-token stats]} instruction-stats-result]
-      (print-stats {:stats stats} (str "Dependency Counts: " dependecy-token)))
+      (commando-utils/print-stats {:stats stats} (str "Dependency Counts: " dependecy-token)))
     (cljfreechart/save-chart-as-file
       (-> chart-data
         (cljfreechart/make-category-dataset {:group-key "dependecy-token"})
@@ -470,7 +401,7 @@
                                     (assoc "dependecy-token" dependecy-token))))
                      instruction-stats-result)]
     (doseq [{:keys [dependecy-token stats]} instruction-stats-result]
-      (print-stats {:stats stats} (str "Dependency Counts: " dependecy-token)))
+      (commando-utils/print-stats {:stats stats} (str "Dependency Counts: " dependecy-token)))
     (cljfreechart/save-chart-as-file
       (-> chart-data
         (cljfreechart/make-category-dataset {:group-key "dependecy-token"})
@@ -499,7 +430,7 @@
                               (assoc "dependecy-token" dependecy-token))))
                instruction-stats-result)]
     (doseq [{:keys [dependecy-token stats]} instruction-stats-result]
-      (print-stats {:stats stats} (str "Dependency Counts: " dependecy-token)))
+      (commando-utils/print-stats {:stats stats} (str "Dependency Counts: " dependecy-token)))
     (cljfreechart/save-chart-as-file
       (-> chart-data
         (cljfreechart/make-category-dataset {:group-key "dependecy-token"})

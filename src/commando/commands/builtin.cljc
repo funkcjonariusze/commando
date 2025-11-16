@@ -95,6 +95,11 @@
 ;; From
 ;; ======================
 
+(def ^:private -malli:commando-from-path
+  (malli/deref
+    [:sequential {:error/message "commando/from should be a sequence path to value in Instruction: [:some 2 \"value\"]"}
+     [:or :string :keyword :int]]))
+
 (def
   ^{:doc "
   Description
@@ -127,87 +132,69 @@
              :result {:commando/from [\"../\" :value]}}}))
       => {:a {:value 1, :result 1}, :b {:value 2, :result 2}}
 
+    (:instruction
+     (commando/execute [command-from-spec]
+       {\"a\" {\"value\" {\"container\" 1}
+            \"result\" {\"commando-from\" [\"../\" \"value\"] \"=\" \"container\"}}
+        \"b\" {\"value\" {\"container\" 2}
+            \"result\" {\"commando-from\" [\"../\" \"value\"] \"=\" \"container\"}}}))
+
+      => /{\"a\" {\"value\" {\"container\" 1}, \"result\" 1},
+         / \"b\" {\"value\" {\"container\" 2}, \"result\" 2}} 
+
    See Also
      `commando.core/execute`
      `commando.commands.builtin/command-fn-spec`
      `commando.commands.builtin/command-from-spec`"}
   command-from-spec
   {:type :commando/from
-   :recognize-fn #(and (map? %) (contains? % :commando/from))
+   :recognize-fn #(and (map? %)
+                    (or
+                      (contains? % :commando/from)
+                      (contains? % "commando-from")))
    :validate-params-fn (fn [m]
-                         (if-let [m-explain
-                                  (malli-error/humanize
-                                    (malli/explain [:map
-                                                    [:commando/from
-                                                     [:sequential {:error/message "commando/from should be a sequence path to value in Instruction: [:some 2 \"value\"]"}
-                                                      [:or :string :keyword :int]]]
-                                                    [:= {:optional true} [:or utils/ResolvableFn :string]]]
-                                      m))]
-                           m-explain
-                           true))
+                         (let [m-explain
+                               (cond
+                                 (contains? m :commando/from)
+                                 (malli-error/humanize
+                                   (malli/explain
+                                     [:map
+                                      [:commando/from -malli:commando-from-path]
+                                      [:= {:optional true} [:or utils/ResolvableFn :string]]]
+                                     m))
+                                 (contains? m "commando-from")
+                                 (malli-error/humanize
+                                   (malli/explain
+                                     [:map
+                                      ["commando-from" -malli:commando-from-path]
+                                      ["=" {:optional true} [:string {:min 1}]]]
+                                     m)))]
+                           (if m-explain
+                             m-explain
+                             true)))
    :apply (fn [instruction command-path-obj command-map]
-            (let [path-to-another-command (deps/point-target-path instruction command-path-obj)
-                  result (get-in instruction path-to-another-command)
-                  result (let [m-= (:= command-map)]
-                           (if m-= (if (string? m-=)
-                                     (get result m-=)
-                                     (let [m-= (utils/resolve-fn m-=)]
-                                       (m-= result))) result))]
-              result))
+            (cond
+              (contains? command-map :commando/from)
+              (let [path-to-another-command (deps/point-target-path instruction command-path-obj)
+                    result (get-in instruction path-to-another-command)
+                    result (let [m-= (:= command-map)]
+                             (if m-= (if (string? m-=)
+                                       (get result m-=)
+                                       (let [m-= (utils/resolve-fn m-=)]
+                                         (m-= result))) result))]
+                result)
+              (contains? command-map "commando-from")
+              (let [path-to-another-command (deps/point-target-path instruction command-path-obj)
+                    result (get-in instruction path-to-another-command)
+                    result (if-let [m-= (get command-map "=")]
+                             (if (string? m-=)
+                               (get result m-=)
+                               result)
+                             result)]
+                result)))
    :dependencies {:mode :point
-                  :point-key :commando/from}})
-
-(def ^{:doc "
-  Description
-    command-from-json-spec - get value from another command or existing value
-    in Instruction. Path to another command is passed inside `\"commando-from\"`
-    key, optionally you can get value of object by using `\"=\"` key.
-
-    Path can be sequence of keywords, strings or integers, starting absolutely from
-    the root of Instruction, or relatively from the current command position by
-    using \"../\" and \"./\" strings in paths.
-
-    [\"some\" 2 \"value\"] - absolute path, started from the root key \"some\"
-    [\"../\" 2 \"value\"] - relative path, go up one level and then down to [2 \"value\"]
-
-  Example
-    (:instruction
-     (commando/execute [command-from-json-spec]
-       {\"a\" {\"value\" {\"container\" 1}
-            \"result\" {\"commando-from\" [\"../\" \"value\"] \"=\" \"container\"}}
-        \"b\" {\"value\" {\"container\" 2}
-            \"result\" {\"commando-from\" [\"../\" \"value\"] \"=\" \"container\"}}}))
-
-    {\"a\" {\"value\" {\"container\" 1}, \"result\" 1},
-     \"b\" {\"value\" {\"container\" 2}, \"result\" 2}}
-
-   See Also
-     `commando.core/execute`
-     `commando.commands.builtin/command-fn-spec`"}
-  command-from-json-spec
-  {:type :commando/from-json
-   :recognize-fn #(and (map? %) (contains? % "commando-from"))
-   :validate-params-fn (fn [m]
-                         (if-let [m-explain
-                                  (malli-error/humanize
-                                    (malli/explain [:map
-                                                    ["commando-from"
-                                                     [:sequential {:error/message "commando-from should be a sequence path to value in Instruction: [\"some\" 2 \"value\"]"}
-                                                      [:or :string :int]]]
-                                                    ["=" {:optional true} [:string {:min 1}]]] m))]
-                           m-explain
-                           true))
-   :apply (fn [instruction command-path-obj command-map]
-            (let [path-to-another-command (deps/point-target-path instruction command-path-obj)
-                  result (get-in instruction path-to-another-command)
-                  result (if-let [m-= (get command-map "=")]
-                           (if (string? m-=)
-                             (get result m-=)
-                             result)
-                           result)]
-              result))
-   :dependencies {:mode :point
-                  :point-key "commando-from"}})
+                  :point-key [:commando/from
+                              "commando-from"]}})
 
 ;; ======================
 ;; Mutation
@@ -227,8 +214,8 @@
 (def ^{:doc "
   Description
     command-mutation-spec - execute mutation of Instruction data.
-    Mutation type is passed inside `:commando/mutation` key and arguments
-    to mutation passed inside rest of map.
+    Mutation id is passed inside `:commando/mutation` or `\"commando-mutation\"`
+    key and arguments to mutation passed inside rest of map.
 
     To declare mutation create method of `command-mutation` multimethod
 
@@ -246,32 +233,7 @@
         :b {:commando/mutation :generate-string :length 5}}))
      => {:a {:random-number 14}, :b {:random-string \"5a379\"}}
 
-   See Also
-     `commando.core/execute`
-     `commando.commands.builtin/command-mutation-spec`
-     `commando.commands.builtin/command-mutation`"}
-  command-mutation-spec
-  {:type :commando/mutation
-   :recognize-fn #(and (map? %) (contains? % :commando/mutation))
-   :validate-params-fn (fn [m]
-                         (if-let [m-explain (malli-error/humanize
-                                              (malli/explain [:map [:commando/mutation :keyword]] m))]
-                           m-explain
-                           true))
-   :apply (fn [_instruction _command-map m]
-            (let [m-tx-type (:commando/mutation m) m (dissoc m :commando/mutation)]
-              (command-mutation m-tx-type m)))
-   :dependencies {:mode :all-inside}})
-
-(def ^{:doc "
-  Description
-    command-mutation-json-spec - execute mutation of Instruction data.
-    Mutation type is passed inside `\"commando-mutation\"` key and arguments
-    to mutation passed inside rest of map.
-
-    To declare mutation create method of `command-mutation` multimethod
-
-  Example
+  Example with-string keys
     (defmethod commando.commands.builtin/command-mutation \"generate-string\" [_ {:strs [length]}]
       {\"random-string\" (apply str (repeatedly (or length 10) #(rand-nth \"abcdefghijklmnopqrstuvwxyz0123456789\")))})
 
@@ -280,7 +242,7 @@
 
     (:instruction
      (commando/execute
-       [command-mutation-json-spec]
+       [command-mutation-spec]
        {\"a\" {\"commando-mutation\" \"generate-number\" \"from\" 10 \"to\" 20}
         \"b\" {\"commando-mutation\" \"generate-string\" \"length\" 5}}))
       => {\"a\" {\"random-number\" 18}, \"b\" {\"random-string\" \"m3gj1\"}}
@@ -288,20 +250,36 @@
    See Also
      `commando.core/execute`
      `commando.commands.builtin/command-mutation-spec`
-     `commando.commands.builtin/command-mutation-json-spec`
      `commando.commands.builtin/command-mutation`"}
-  command-mutation-json-spec
-  {:type :commando/mutation-json
-   :recognize-fn #(and (map? %) (contains? % "commando-mutation"))
+  command-mutation-spec
+  {:type :commando/mutation
+   :recognize-fn #(and (map? %)
+                    (or
+                      (contains? % :commando/mutation)
+                      (contains? % "commando-mutation")))
    :validate-params-fn (fn [m]
-                         (if-let [m-explain (malli-error/humanize
-                                              (malli/explain [:map ["commando-mutation" [:string {:min 1}]]] m))]
-                           m-explain
-                           true))
+                         (let [m-explain
+                               (cond
+                                 (contains? m :commando/mutation)
+                                 (malli-error/humanize
+                                   (malli/explain
+                                     [:map [:commando/mutation [:or :keyword :string]]]
+                                     m))
+                                 (contains? m "commando-mutation")
+                                 (malli-error/humanize
+                                   (malli/explain
+                                     [:map ["commando-mutation" [:or :keyword :string]]]
+                                     m)))]
+                           (if m-explain
+                             m-explain
+                             true)))
    :apply (fn [_instruction _command-map m]
-            (let [m-tx-type (get m "commando-mutation") m (dissoc m "commando-mutation")] (command-mutation m-tx-type m)))
+            (cond
+              (contains? m :commando/mutation)
+              (command-mutation (get m :commando/mutation)  (dissoc m :commando/mutation))
+              (contains? m "commando-mutation")
+              (command-mutation (get m "commando-mutation") (dissoc m "commando-mutation"))))
    :dependencies {:mode :all-inside}})
-
 
 ;; ======================
 ;; Macro
@@ -319,7 +297,8 @@
   Description
     command-macro-spec - help to define reusable instruction template,
     what execute instruction using the same registry as the current one.
-    To declare macro expand `command-mutation` multimethod.
+    Macro id is passed inside `:commando/macro` or `\"commando-macro\"`
+    key and arguments to mutation passed inside rest of map.
 
   Example
     Asume we have two vectors with string numbers:
@@ -402,19 +381,32 @@
   {:type :commando/macro
    :recognize-fn #(and
                     (map? %)
-                    (contains? % :commando/macro))
+                    (or
+                     (contains? % :commando/macro)
+                     (contains? % "commando-macro")))
    :validate-params-fn (fn [m]
-                         (if-let [explain-m
-                                  (malli-error/humanize
-                                    (malli/explain
-                                      [:map
-                                       [:commando/macro {:optional true} :keyword]]
-                                      m))]
-                           explain-m
-                           true))
+                         (let [m-explain
+                               (cond
+                                 (contains? m :commando/macro)
+                                 (malli-error/humanize
+                                   (malli/explain
+                                     [:map
+                                      [:commando/macro [:or :keyword :string]]]
+                                     m))
+                                 (contains? m "commando-macro")
+                                 (malli-error/humanize
+                                   (malli/explain
+                                     [:map
+                                      ["commando-macro" [:or :keyword :string]]]
+                                     m)))]
+                           (if m-explain
+                             m-explain
+                             true)))
    :apply (fn [_instruction _command-map m]
-            (let [macro-type (get m :commando/macro)
-                  macro-data (dissoc m :commando/macro)
+            (let [[macro-type macro-data]
+                  (cond
+                    (get m :commando/macro) [(get m :commando/macro) (dissoc m :commando/macro)]
+                    (get m "commando-macro") [(get m "commando-macro") (dissoc m "commando-macro")])
                   result (commando/execute
                            (utils/command-map-spec-registry)
                            (command-macro macro-type macro-data))]
@@ -423,41 +415,3 @@
                 (throw (ex-info (str utils/exception-message-header "command-macro. Failure execution :commando/macro") result)))))
    :dependencies {:mode :all-inside}})
 
-(def ^{:doc "
-  Description
-    command-macro-json-spec - help to define reusable instruction template,
-    what execute instruction using the same registry as the current one.
-    To declare macro expand `command-mutation` multimethod. Using string
-    key \"commando-macro\" for declaring macroses instead of keyword :commando/macro.
-
-  Example
-    read one from `command-macro-spec`.
-
-  See Also
-     `commando.core/execute`
-     `commando.commands.builtin/command-macro`
-     `commando.commands.builtin/command-macro-spec`"}
-  command-macro-json-spec
-  {:type :commando/macro-json
-   :recognize-fn #(and
-                    (map? %)
-                    (contains? % "commando-macro"))
-   :validate-params-fn (fn [m]
-                         (if-let [explain-m
-                                  (malli-error/humanize
-                                    (malli/explain
-                                      [:map
-                                       ["commando-macro" {:optional true} :string]]
-                                      m))]
-                           explain-m
-                           true))
-   :apply (fn [_instruction _command-map m]
-            (let [macro-type (get m "commando-macro")
-                  macro-data (dissoc m "commando-macro")
-                  result (commando/execute
-                           (utils/command-map-spec-registry)
-                           (command-macro macro-type macro-data))]
-              (if (= :ok (:status result))
-                (:instruction result)
-                (throw (ex-info (str utils/exception-message-header "command-macro. Failure execution :commando/macro") result)))))
-   :dependencies {:mode :all-inside}})

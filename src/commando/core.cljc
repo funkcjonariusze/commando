@@ -20,7 +20,7 @@
    - `:dependencies` - declare way the command should build dependency
         {:mode :all-inside} - all commands inside the current map are depednencies
         {:mode :none} - no dependencies, the other commands may depend from it.
-        {:mode :point :point-key :commando/from} - special type of dependency 
+        {:mode :point :point-key [:commando/from]} - special type of dependency
              which declare that current command depends from the command it refer by 
              exampled :commando/from key.
 

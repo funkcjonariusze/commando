@@ -109,7 +109,7 @@
     ;; -------------------
   (testing "Successfull test cases"
     (is (= {:a 1, :vec 1, :vec-map 1, :result-of-another 1}
-          (get-in 
+          (get-in
             (commando/execute [command-builtin/command-fn-spec
                                command-builtin/command-from-spec]
               {"values" {:a 1
@@ -141,9 +141,27 @@
               :e {:result [5
                            {:commando/from ["./" "../" 0]}]}})))
       "Uncorrect extracting :commando/from by relative path")
+    (is (= {"a" {"value" 1, "result" 1},
+            "b" {"value" 2, "result" 2},
+            "c" {"value" 3, "result" [3]},
+            "d" {"result" [4 4]},
+            "e" {"result" [5 5]}}
+          (:instruction
+           (commando/execute [command-builtin/command-from-spec]
+             {"a" {"value" 1
+                   "result" {"commando-from" ["../" "value"]}}
+              "b" {"value" 2
+                   "result" {"commando-from" ["../" "value"]}}
+              "c" {"value" 3
+                   "result" [{"commando-from" ["../" "../" "value"]}]}
+              "d" {"result" [4
+                             {"commando-from" ["../" 0]}]}
+              "e" {"result" [5
+                             {"commando-from" ["./" "../" 0]}]}})))
+      "Uncorrect extracting \"commando-from\" by relative path")
     #?(:clj
        (is (= {:=-keyword 1, :=-fn 2, :=-symbol 2, :=-var 2}
-             (get-in 
+             (get-in
                (commando/execute [command-builtin/command-fn-spec
                                   command-builtin/command-from-spec]
                  {"value" {:kwd 1}
@@ -155,7 +173,7 @@
              )
          "Uncorrect commando/from ':=' applicator. CLJ Supports: fn/keyword/var/symbol")
        :cljs (is (= {:=-keyword 1, :=-fn 2}
-                   (get-in 
+                   (get-in
                      (commando/execute [command-builtin/command-fn-spec
                                         command-builtin/command-from-spec]
                        {"value" {:kwd 1}
@@ -171,7 +189,7 @@
         (commando/execute [command-builtin/command-from-spec]
           {"source" {:a 1 :b 2}
            "missing" {:commando/from ["UNEXISING"]}})
-        {:message "Commando. Point dependency failed: key ':commando/from' references non-existent path [\"UNEXISING\"]",
+        {:message "Commando. Point dependency failed: key '[:commando/from \"commando-from\"]' references non-existent path [\"UNEXISING\"]",
          :path ["missing"],
          :command {:commando/from ["UNEXISING"]}})
       "Waiting on error, bacause commando/from seding to unexising path")
@@ -218,6 +236,11 @@
   (malli/assert [:+ number?] vector2)
   (reduce + (map * vector1 vector2)))
 
+(defmethod command-builtin/command-mutation "dot-product" [_macro-type {:strs [vector1 vector2]}]
+  (malli/assert [:+ number?] vector1)
+  (malli/assert [:+ number?] vector2)
+  (reduce + (map * vector1 vector2)))
+
 (deftest command-mutation-spec
   (testing "Successfull test cases"
     (is (=
@@ -233,7 +256,21 @@
               :result-with-deps {:commando/mutation :dot-product
                                  :vector1 {:commando/from [:vector1]}
                                  :vector2 {:commando/from [:vector2]}}})))
-      "Uncorrectly processed :commando/mutation in dot-product example"))
+      "Uncorrectly processed :commando/mutation in dot-product example")
+    (is (=
+          {"vector1" [1 2 3], "vector2" [3 2 1], "result-simple" 10, "result-with-deps" 10}
+          (:instruction
+           (commando/execute [command-builtin/command-mutation-spec
+                              command-builtin/command-from-spec]
+             {"vector1" [1 2 3]
+              "vector2" [3 2 1]
+              "result-simple" {"commando-mutation" "dot-product"
+                              "vector1" [1 2 3]
+                              "vector2" [3 2 1]}
+              "result-with-deps" {"commando-mutation" "dot-product"
+                                 "vector1" {"commando-from" ["vector1"]}
+                                 "vector2" {"commando-from" ["vector2"]}}})))
+      "Uncorrectly processed \"commando/mutation\" in dot-product example"))
   (testing "Failure test cases"
     (is
       (helpers/status-map-contains-error?
@@ -246,7 +283,7 @@
           (=
             (-> error :error :data (dissoc :value))
             {:command-type :commando/mutation
-             :reason {:commando/mutation ["should be a keyword"]}
+             :reason {:commando/mutation ["should be a keyword" "should be a string"]}
              :path []})))
       "Waiting on error, bacause commando/mutation has wrong type for :commando/mutation")
     (is
@@ -277,7 +314,7 @@
 ;; MACRO-SPEC
 ;; ===========================
 
-(defmethod command-builtin/command-macro :string-vectors-dot-product [_macro-type {:keys [vector1-str vector2-str]}]
+(defn string-vector-dot-product [vector1-str vector2-str]
   {:= :dot-product
    :commando/apply
    {:vector1-str vector1-str
@@ -301,6 +338,11 @@
      :args [{:commando/from [:commando/apply :vector1]}
             {:commando/from [:commando/apply :vector2]}]}}})
 
+(defmethod command-builtin/command-macro :string-vectors-dot-product [_macro-type {:keys [vector1-str vector2-str]}]
+  (string-vector-dot-product vector1-str vector2-str))
+(defmethod command-builtin/command-macro "string-vectors-dot-product" [_macro-type {:strs [vector1-str vector2-str]}]
+  (string-vector-dot-product vector1-str vector2-str))
+
 (deftest command-macro-spec
   (testing "Successfull test cases"
     (is
@@ -319,7 +361,26 @@
             :vector-dot-2
             {:commando/macro :string-vectors-dot-product
              :vector1-str ["10" "20" "30"]
-             :vector2-str ["4" "5" "6"]}})))))
+             :vector2-str ["4" "5" "6"]}})))
+      "Uncorrectly processed :commando/macro for :string-vectors-dot-product example")
+    (is
+      (=
+        {"vector-dot-1" 32, "vector-dot-2" 320}
+        (:instruction
+         (commando/execute
+           [command-builtin/command-macro-spec
+            command-builtin/command-fn-spec
+            command-builtin/command-from-spec
+            command-builtin/command-apply-spec]
+           {"vector-dot-1"
+            {"commando-macro" "string-vectors-dot-product"
+             "vector1-str" ["1" "2" "3"]
+             "vector2-str" ["4" "5" "6"]}
+            "vector-dot-2"
+            {"commando-macro" "string-vectors-dot-product"
+             "vector1-str" ["10" "20" "30"]
+             "vector2-str" ["4" "5" "6"]}})))
+      "Uncorrectly processed \"commando-macro\" for \"string-vectors-dot-product\" example"))
   (testing "Failure test cases"
     (is
       (helpers/status-map-contains-error?
@@ -332,7 +393,6 @@
           (=
             (-> error :error :data (dissoc :value))
             {:command-type :commando/macro,
-             :reason {:commando/macro ["should be a keyword"]},
+             :reason {:commando/macro ["should be a keyword" "should be a string"]},
              :path []})))
       "Waiting on error, bacause commando/mutation has wrong type for :commando/mutation")))
-
