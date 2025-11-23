@@ -189,7 +189,7 @@
         (commando/execute [command-builtin/command-from-spec]
           {"source" {:a 1 :b 2}
            "missing" {:commando/from ["UNEXISING"]}})
-        {:message "Commando. Point dependency failed: key '[:commando/from \"commando-from\"]' references non-existent path [\"UNEXISING\"]",
+        {:message "Commando. Point dependency failed: key ':commando/from' references non-existent path [\"UNEXISING\"]",
          :path ["missing"],
          :command {:commando/from ["UNEXISING"]}})
       "Waiting on error, bacause commando/from seding to unexising path")
