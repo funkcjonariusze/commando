@@ -511,6 +511,32 @@
       "Recursive resolving and overriding of \"test-instruction-qe\" resolver through the key \"resolve-instruction-qe\". Case with using string keys either keywords"))
 
   (testing "Failing exception"
+
+    (is
+      (helpers/status-map-contains-error?
+        (binding [commando-utils/*execute-config*
+                  {:debug-result false
+                   :error-data-string false}]
+          (commando/execute
+            registry
+            {:commando/resolve :test-instruction-qe
+             "commando-resolve" :test-instruction-qe
+             :x 1
+             :QueryExpression
+             [:string]}))
+        (fn [error]
+          (=
+            (-> error :error :data)
+            {:command-type :commando/resolve,
+             :reason "The keyword :commando/resolve and the string \"commando-resolve\" cannot be used simultaneously in one command.",
+             :path [],
+             :value
+             {:commando/resolve :test-instruction-qe,
+              "commando-resolve" :test-instruction-qe,
+              :x 1,
+              :QueryExpression [:string]}})))
+      "Using string and keyword form shouldn't be allowed")
+
     (is
       (=
         {:EEE

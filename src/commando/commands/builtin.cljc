@@ -155,6 +155,10 @@
    :validate-params-fn (fn [m]
                          (let [m-explain
                                (cond
+                                 (and
+                                   (contains? m :commando/from)
+                                   (contains? m "commando-from"))
+                                 "The keyword :commando/from and the string \"commando-from\" cannot be used simultaneously in one command."
                                  (contains? m :commando/from)
                                  (malli-error/humanize
                                    (malli/explain
@@ -260,6 +264,10 @@
    :validate-params-fn (fn [m]
                          (let [m-explain
                                (cond
+                                 (and
+                                   (contains? m :commando/mutation)
+                                   (contains? m "commando-mutation"))
+                                 "The keyword :commando/mutation and the string \"commando-mutation\" cannot be used simultaneously in one command."
                                  (contains? m :commando/mutation)
                                  (malli-error/humanize
                                    (malli/explain
@@ -387,6 +395,10 @@
    :validate-params-fn (fn [m]
                          (let [m-explain
                                (cond
+                                 (and
+                                   (contains? m :commando/macro)
+                                   (contains? m "commando-macro"))
+                                 "The keyword :commando/macro and the string \"commando-macro\" cannot be used simultaneously in one command."
                                  (contains? m :commando/macro)
                                  (malli-error/humanize
                                    (malli/explain

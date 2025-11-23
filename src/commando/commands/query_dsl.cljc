@@ -512,6 +512,10 @@
    :validate-params-fn (fn [m]
                          (let [m-explain
                                (cond
+                                 (and
+                                   (contains? m :commando/resolve)
+                                   (contains? m "commando-resolve"))
+                                 "The keyword :commando/resolve and the string \"commando-resolve\" cannot be used simultaneously in one command."
                                  (contains? m :commando/resolve)
                                  (malli-error/humanize
                                    (malli/explain

@@ -105,8 +105,11 @@
 ;; FROM-SPEC
 ;; ===========================
 
+
+
+
 (deftest command-from-spec
-    ;; -------------------
+  ;; -------------------
   (testing "Successfull test cases"
     (is (= {:a 1, :vec 1, :vec-map 1, :result-of-another 1}
           (get-in
@@ -202,6 +205,23 @@
          :path ["missing"],
          :command {"commando-from" ["UNEXISING"]}})
       "Waiting on error, bacause \"commando-from\" seding to unexising path")
+    (is
+      (helpers/status-map-contains-error?
+        (binding [commando-utils/*execute-config*
+                  {:debug-result false
+                   :error-data-string false}]
+          (commando/execute [command-builtin/command-from-spec]
+            {"value" 1
+             "result" {:commando/from ["value"]
+                       "commando-from" ["value"]}}))
+        (fn [error]
+          (=
+            (-> error :error :data)
+            {:command-type :commando/from,
+             :reason "The keyword :commando/from and the string \"commando-from\" cannot be used simultaneously in one command.",
+             :path ["result"],
+             :value {:commando/from ["value"], "commando-from" ["value"]}})))
+      "Using string and keyword form shouldn't be allowed")
     (is (helpers/status-map-contains-error?
           (binding [commando-utils/*execute-config*
                     {:debug-result false
@@ -281,6 +301,28 @@
                                  "vector2" {"commando-from" ["vector2"]}}})))
       "Uncorrectly processed \"commando/mutation\" in dot-product example"))
   (testing "Failure test cases"
+    (is
+      (helpers/status-map-contains-error?
+        (binding [commando-utils/*execute-config*
+                  {:debug-result false
+                   :error-data-string false}]
+          (commando/execute [command-builtin/command-mutation-spec]
+            {:commando/mutation :dot-product
+             "commando-mutation" "dot-product"
+             "vector1" [1 2 3]
+             "vector2" [3 2 1]}))
+        (fn [error]
+          (=
+            (-> error :error :data)
+            {:command-type :commando/mutation,
+             :reason "The keyword :commando/mutation and the string \"commando-mutation\" cannot be used simultaneously in one command.",
+             :path [],
+             :value
+             {:commando/mutation :dot-product,
+              "commando-mutation" "dot-product",
+              "vector1" [1 2 3],
+              "vector2" [3 2 1]}})))
+      "Using string and keyword form shouldn't be allowed")
     (is
       (helpers/status-map-contains-error?
         (binding [commando-utils/*execute-config*
@@ -391,6 +433,32 @@
              "vector2-str" ["4" "5" "6"]}})))
       "Uncorrectly processed \"commando-macro\" for \"string-vectors-dot-product\" example"))
   (testing "Failure test cases"
+    (is
+      (helpers/status-map-contains-error?
+        (binding [commando-utils/*execute-config*
+                  {:debug-result false
+                   :error-data-string false}]
+          (commando/execute
+            [command-builtin/command-macro-spec
+             command-builtin/command-fn-spec
+             command-builtin/command-from-spec
+             command-builtin/command-apply-spec]
+            {:commando/macro :string-vectors-dot-product
+             "commando-macro" "string-vectors-dot-product"
+             "vector1-str" ["1" "2" "3"]
+             "vector2-str" ["4" "5" "6"]}))
+        (fn [error]
+          (=
+            (-> error :error :data)
+            {:command-type :commando/macro,
+             :reason "The keyword :commando/macro and the string \"commando-macro\" cannot be used simultaneously in one command.",
+             :path [],
+             :value
+             {:commando/macro :string-vectors-dot-product
+              "commando-macro" "string-vectors-dot-product"
+              "vector1-str" ["1" "2" "3"]
+              "vector2-str" ["4" "5" "6"]}})))
+      "Using string and keyword form shouldn't be allowed")
     (is
       (helpers/status-map-contains-error?
         (binding [commando-utils/*execute-config*
