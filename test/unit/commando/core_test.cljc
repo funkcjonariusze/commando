@@ -1060,7 +1060,7 @@
         "Invalid reference causes failure")
     (is (helpers/status-map-contains-error?
          (commando/build-compiler [cmds-builtin/command-from-spec] (:invalid-ref-instruction build-compiler-test-data))
-         "Commando. Point dependency failed: key '[:commando/from \"commando-from\"]' references non-existent path [\"nonexistent\"]")
+         "Commando. Point dependency failed: key ':commando/from' references non-existent path [\"nonexistent\"]")
         "Error information is populated")
     (is (helpers/status-map-contains-error? (commando/build-compiler [] (:cmd-instruction build-compiler-test-data))
                                     "Invalid registry specification")
@@ -1135,7 +1135,7 @@
       (is (=
             (:errors result)
             [{:message
-              "Commando. Point dependency failed: key '[:commando/from \"commando-from\"]' references non-existent path [\"UNEXISTING_PATH\"]",
+              "Commando. Point dependency failed: key ':commando/from' references non-existent path [\"UNEXISTING_PATH\"]",
               :path ["2" :container],
               :command {:commando/from ["UNEXISTING_PATH"]}}
              {:message "Corrupted compiler structure"}])))
