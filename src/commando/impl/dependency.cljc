@@ -87,21 +87,32 @@
   "Throws a standardized error for missing point dependencies."
   [command-path-obj target-path instruction]
   (let [deps-config (:dependencies (cm/command-data command-path-obj))
+        command-map (get-in instruction (cm/command-path command-path-obj))
+        point-key-config (:point-key deps-config)
+        actual-key (if (sequential? point-key-config)
+                     (reduce (fn [_ point-key] (when (contains? command-map point-key) (reduced point-key)))
+                             (first point-key-config)
+                             point-key-config)
+                     point-key-config)
         error-msg (str utils/exception-message-header
-                       "Point dependency failed: key '" (:point-key deps-config)
+                       "Point dependency failed: key '" actual-key
                        "' references non-existent path " target-path)]
     (throw (ex-info error-msg
                     {:message error-msg
                      :path (cm/command-path command-path-obj)
-                     :command (get-in instruction (cm/command-path command-path-obj))}))))
+                     :command command-map}))))
 
 (defn point-target-path
   "Returns the target path for a :point dependency, resolving relative navigation."
   [instruction command-path-obj]
-  (let [point-key (get-in (cm/command-data command-path-obj) [:dependencies :point-key])
+  (let [point-key-seq (get-in (cm/command-data command-path-obj) [:dependencies :point-key])
         command-path (cm/command-path command-path-obj)
         command-map (get-in instruction command-path)
-        pointed-path (get command-map point-key)]
+        pointed-path (reduce (fn [_ point-key]
+                               (when-let [pointed-path (get command-map point-key)]
+                                 (reduced pointed-path)))
+                       nil
+                       point-key-seq)]
     (->> pointed-path
       (resolve-relative-path command-path)
       vec)))

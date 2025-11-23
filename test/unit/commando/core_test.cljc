@@ -883,7 +883,7 @@
    :validate-params-fn (fn [m] (malli/validate [:map [:ARG [:+ :any]]] m))
    :apply (fn [instruction _command-path-obj m] (get-in instruction (:ARG m)))
    :dependencies {:mode :point
-                  :point-key :ARG}})
+                  :point-key [:ARG]}})
 
 (def custom-registry [custom-op-cmd custom-arg-cmd])
 

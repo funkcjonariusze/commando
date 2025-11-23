@@ -331,7 +331,7 @@ Let's create a new command using a CommandMapSpec configuration map:
 - `:dependencies` - describes the type of dependency this command has. Commando supports three modes:
   - `{:mode :all-inside}` - the command scans itself for dependencies on other commands within its body.
   - `{:mode :none}` - the command has no dependencies and can be evaluated whenever.
-  - `{:mode :point :point-key :commando/from}` - allowing to be dependent anywhere in the instructions. Expects point-key which tells where is the dependency (commando/from as an example uses this)
+  - `{:mode :point :point-key [:commando/from]}` - allowing to be dependent anywhere in the instructions. Expects point-key(-s) which tells where is the dependency (commando/from as an example uses this)
 
 Now you can use it for more expressive operations like "summ=" and "multiply=" as shown below:
 
@@ -516,7 +516,7 @@ Here's an example of how to use `:debug-result`:
    :recognize-fn       #function[commando.commands.builtin/fn],
    :validate-params-fn #function[commando.commands.builtin/fn],
    :apply              #function[commando.commands.builtin/fn],
-   :dependencies       {:mode :point, :point-key :commando/from}}],
+   :dependencies       {:mode :point, :point-key [:commando/from]}}],
  :warnings [],
  :errors [],
  :successes

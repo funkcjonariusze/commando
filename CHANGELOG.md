@@ -15,6 +15,11 @@ UPDATED build-deps-tree. Instead of searching dependency using the list of comma
 
 FIXED find-commands. StackOverflowException in case of long lists of dependencies in the one level.
 
+REMOVED all `*-json-spec` builin commands were joined with it origin forms. Like `commando-from-json-spec` at now are handled by the original `commando-from-spec`, user just may use `:commando/from` either `"commando-from"` key to defining logic. Covering this special "string-based" instructions with tests.
+
+UPDATED documentation about how to use commando DSL [with an JSON structure](./doc/json.md). 
+
+ADDED to `commando.impl.utils` two helper functions: `print-stats` - to print status-map `:stats` key into output; `print-deep-stats` - printing the flamegraph basing on `:stats` of every internal `commando/execution`(very helpfull for debugging macroses or query_dsl) 
 
 # 1.0.4
 ADDED commando.commands.builtin/commando-macro-spec. The new type of command that allow to group instructions by its functionality and use it as a single command. Added Readme information about the macro.

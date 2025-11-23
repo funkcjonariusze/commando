@@ -4,7 +4,7 @@
    [commando.impl.status-map :as smap]
    [commando.impl.utils      :as commando-utils]
    [malli.core               :as malli]
-   [malli.error]
+   [malli.error              :as malli-error]
    #?(:clj [clojure.pprint :as pprint])))
 
 (def ^:private exception-message-header (str commando-utils/exception-message-header "QueryDSL. "))
@@ -336,21 +336,34 @@
     but allow invoking `commando/execute` internally inside the
     evaluation step, what make it usefull for querying data.
 
-    Querying(internal execution) controlled by QueryExpression - custom
-    DSL, what visually mention the EQL.
+    Resolve id is passed inside `:commando/resolve` or `\"commando-resolve\"`
+    key and arguments to resolver passed inside rest of map.
+
+    Querying controlled by QueryExpression - custom DSL,
+     what visually mention the EQL.
 
   QueryExpression Syntax Example
-   [:a0
-    [:b0 {:b0props {}}]
-    {:c0
-     [:a1
-      :b1
-      {:c1
-       [:a2
-        :b2]}]}
-    {[:d0 {:d0props {}}]
-     [:a1
-      :b1]}]
+     [:a0
+      [:b0 {:b0props {}}]
+      {:c0
+       [:a1
+        {:c1
+         [:a2
+          :b2]}]}
+      {[:d0 {:d0props {}}]
+       [:a1
+        :b1]}]
+    or even with using strings
+     [\"a0\"
+      [\"b0\" {\"b0props\" {}}]
+      {\"c0\"
+       [\"a1\"
+        {\"c1\"
+         [\"a2\"
+          \"b2\"]}]}
+      {[\"d0\" {\"d0props\" {}}]
+       [\"a1\"
+        \"b1\"]}]
 
    Example
      (defmethod commando.commands.builtin/command-mutation :generate-password [_ _]
@@ -415,55 +428,7 @@
       => {:first-name \"Adam\",
           :UNEXISTING {:status :failed, :errors [{:message \"Commando. Graph Query. QueryExpression attribute ':UNEXISTING' is unreachable\"}]}}
 
-   Parts
-     `commando.commands.query-dsl/resolve-instruction-qe` run internal call of `commando/execute`.
-     `commando.commands.query-dsl/->query-run` trim query data according to passed QueryExpression
-     `commando.commands.query-dsl/command-resolve` multimethod to declare resolvers.
-
-   See Also
-     `commando.core/execute`
-     `commando.commands.query-dsl/command-mutation-spec`
-     `commando.commands.builtin/command-mutation-spec`"}
-  command-resolve-spec
-  {:type :commando/resolve
-   :recognize-fn #(and (map? %) (contains? % :commando/resolve))
-   :validate-params-fn (fn [m]
-                         (if-let [explain-m
-                                  (malli.error/humanize
-                                    (malli/explain
-                                      [:map
-                                       [:commando/resolve :keyword]
-                                       [:QueryExpression
-                                        {:optional true}
-                                        QueryExpressionMalli]]
-                                      m))]
-                           explain-m
-                           true))
-   :apply (fn [_instruction _command-map m] (command-resolve (:commando/resolve m) (dissoc m :commando/resolve)))
-   :dependencies {:mode :all-inside}})
-
-(def ^{:doc "
-  Description
-    command-resolve-json-spec - like command-resolve-spec but
-    use \"string\" keys instead of Keywords
-
-    Querying(internal execution) controlled by QueryExpression - custom
-    DSL, what visually mention the EQL.
-
-  QueryExpression syntax example
-    [\"a0\"
-     [\"b0\" {\"b0props\" {}}]
-     {\"c0\"
-      [\"a1\"
-       \"b1\"
-       {\"c1\"
-        [\"a2\"
-         \"b2\"]}]}
-     {[\"d0\" {\"d0props\" {}}]
-      [\"a1\"
-       \"b1\"]}]
-
-   Example
+   Example with using string keys
      (defmethod commando.commands.builtin/command-mutation \"generate-password\" [_ _]
        {\"random-string\" (apply str (repeatedly 20 #(rand-nth \"abcdefghijklmnopqrstuvwxyz0123456789\")))})
 
@@ -495,8 +460,8 @@
      ;; Let try to use it!
      (:instruction
       (commando.core/execute
-        [commands-builtin/command-mutation-json-spec
-         command-resolve-json-spec]
+        [commands-builtin/command-mutation-spec
+         command-resolve-spec]
         {\"commando-resolve\" \"query-user\"
          \"QueryExpression\"
          [\"first-name\"
@@ -539,22 +504,41 @@
      `commando.core/execute`
      `commando.commands.query-dsl/command-mutation-spec`
      `commando.commands.builtin/command-mutation-spec`"}
-  command-resolve-json-spec
-  {:type :commando/resolve-json
-   :recognize-fn #(and (map? %) (contains? % "commando-resolve"))
+  command-resolve-spec
+  {:type :commando/resolve
+   :recognize-fn #(and (map? %) (or
+                                (contains? % :commando/resolve)
+                                (contains? % "commando-resolve")))
    :validate-params-fn (fn [m]
-                         (if-let [explain-m
-                                  (malli.error/humanize
-                                    (malli/explain
-                                      [:map
-                                       ["commando-resolve" [:string {:min 1}]]
-                                       ["QueryExpression"
-                                        {:optional true}
-                                        QueryExpressionMalli]]
-                                      m))]
-                           explain-m
-                           true))
+                         (let [m-explain
+                               (cond
+                                 (and
+                                   (contains? m :commando/resolve)
+                                   (contains? m "commando-resolve"))
+                                 "The keyword :commando/resolve and the string \"commando-resolve\" cannot be used simultaneously in one command."
+                                 (contains? m :commando/resolve)
+                                 (malli-error/humanize
+                                   (malli/explain
+                                     [:map
+                                      [:commando/resolve :keyword]
+                                      [:QueryExpression
+                                       {:optional true}
+                                       QueryExpressionMalli]]
+                                     m))
+                                 (contains? m "commando-resolve")
+                                 (malli-error/humanize
+                                   (malli/explain
+                                     [:map
+                                      ["commando-resolve" [:string {:min 1}]]
+                                      ["QueryExpression"
+                                       {:optional true}
+                                       QueryExpressionMalli]]
+                                     m)))]
+                           (if m-explain
+                             m-explain
+                             true)))
    :apply (fn [_instruction _command-map m]
-               (command-resolve (get m "commando-resolve") (dissoc m "commando-resolve")))
+            (cond
+              (contains? m :commando/resolve) (command-resolve (get m :commando/resolve ) (dissoc m :commando/resolve))
+              (contains? m "commando-resolve") (command-resolve (get m "commando-resolve") (dissoc m "commando-resolve"))))
    :dependencies {:mode :all-inside}})
-

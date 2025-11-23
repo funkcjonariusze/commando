@@ -93,7 +93,7 @@
                    [:multi {:dispatch :mode}
                     [:none [:map]]
                     [:all-inside [:map]]
-                    [:point [:map [:point-key [:or :keyword :string]]]]]]]]
+                    [:point [:map [:point-key [:+ [:or :keyword :string]]]]]]]]]
                 {:registry (merge (malli/default-schemas) (malli-util/schemas))}))
 
 (defn validate-command-spec

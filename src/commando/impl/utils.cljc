@@ -48,7 +48,7 @@
    - `:uuid` the unique name of execution, generated everytime the user
      invoke `commando.core/execute`
    - `:stack` in case of user use `commando.commands.builtin/command-macro-spec`,
-     or `commando.commands.query-dsl/command-resolve-json-spec` or any sort of
+     or `commando.commands.query-dsl/command-resolve-spec` or any sort of
      commands what invoking `commando.core/execute` inside of parent instruction
      by simulation recursive call, the :stack key will store the invocation stack
      in vector of :uuids"
@@ -295,3 +295,143 @@ See
     (serialize-exception-fn e)
     (map? e) e
     :else {:message (str e)}))
+
+
+;; -----------
+;; Stats Tools
+;; -----------
+
+;; print stats of execution
+
+(defn print-stats
+  "Prints a formatted summary of the execution stats from a status-map.
+
+  Example
+    (print-stats
+      (commando.core/execute
+        [commando.commands.builtin/command-from-spec]
+        {\"1\" 1
+         \"2\" {:commando/from [\"1\"]}
+         \"3\" {:commando/from [\"2\"]}}))
+    OUT=>
+     Execution Stats:
+       1  execute-commands! 281.453µs
+       =  execute           1.926956ms
+
+    (print-stats
+      (binding [commando.impl.utils/*execute-config*
+                {:debug-result true}]
+        (commando.core/execute
+          [commando.commands.builtin/command-from-spec]
+          {\"1\" 1
+           \"2\" {:commando/from [\"1\"]}
+           \"3\" {:commando/from [\"2\"]}})))
+    OUT=>
+     Execution Stats:
+       1  use-registry          141.373µs
+       2  find-commands         719.128µs
+       3  build-deps-tree       141.061µs
+       4  sort-commands-by-deps 112.841µs
+       5  execute-commands!     78.601µs
+       =  execute               1.466249ms
+
+
+  See More
+   `commando.impl.utils/*execute-config*`"
+  ([status-map]
+   (print-stats status-map nil))
+  ([status-map title]
+   (when-let [stats (:stats status-map)]
+     (let [max-key-len (apply max 0 (map (comp count name first) stats))]
+       (println (str "\nExecution Stats" (when title (str "(" title ")")) ":"))
+       (doseq [[index [stat-key _ formatted]] (map-indexed vector stats)]
+         (let [key-str (name stat-key)
+               padding (str/join "" (repeat (- max-key-len (count key-str)) " "))]
+           (println (str
+                      "  " (if (= "execute" key-str) "=" (str (inc index)) )
+                      "  " key-str " " padding formatted))))))))
+
+
+;; print stats for all internal executions
+
+(defn ^:private flame-print-stats [stats indent]
+  (let [max-key-len (apply max 0 (map (comp count name first) stats))]
+    (doseq [[stat-key _ formatted] stats]
+      (let [key-str (name stat-key)
+            padding (str/join "" (repeat (- max-key-len (count key-str)) " "))]
+        (println (str indent
+                   "" key-str " " padding formatted))))))
+
+(defn ^:private flame-print [data & [indent]]
+  (let [indent (or indent "")]
+    (doseq [[k v] data]
+      (println (str indent "———" k))
+      (when (:stats v)
+        (flame-print-stats (:stats v) (str indent "   |")))
+      (doseq [[child-k child-v] v
+              :when (map? child-v)]
+        (when (not= child-k :stats)
+          (flame-print {child-k child-v} (str indent "   :")))))))
+
+(defn ^:private flamegraph [data]
+  (println "Printing Flamegraph for executes:")
+  (flame-print data))
+
+(defn print-deep-stats
+  "Function print the flamegraph of internals execution.
+
+   Example
+     (defmethod commando.commands.builtin/command-mutation :rand-n
+       [_macro-type {:keys [v]}]
+       (:instruction
+        (commando.core/execute
+          [commando.commands.builtin/command-apply-spec]
+          {:commando/apply v
+           := (fn [n] (rand-int n))})))
+
+     (defmethod commando.commands.builtin/command-macro :sum-n
+       [_macro-type {:keys [v]}]
+       {:commando/fn (fn [& v-coll] (apply + v-coll))
+        :args [v
+               {:commando/mutation :rand-n
+                :v 200}]})
+
+     (print-deep-stats
+       #(commando.core/execute
+          [commando.commands.builtin/command-fn-spec
+           commando.commands.builtin/command-from-spec
+           commando.commands.builtin/command-macro-spec
+           commando.commands.builtin/command-mutation-spec]
+          {:value {:commando/mutation :rand-n :v 200}
+           :result {:commando/macro :sum-n
+                    :v {:commando/from [:value]}}}))
+
+     OUT=>
+       Printing Flamegraph for executes:
+       ———59f2f084-28f6-44fd-bf52-1e561187a2e5
+          |execute-commands! 1.123606ms
+          |execute           1.92817ms
+          :———e4e245ca-194a-43c6-9d7e-9225e0424c46
+          :   |execute-commands! 66.344µs
+          :   |execute           287.669µs
+          :———77de8840-c9d3-4baa-b0d6-8a9806ede29d
+          :   |execute-commands! 372.566µs
+          :   |execute           721.636µs
+          :   :———0aefeb8e-04b2-4e77-b526-6969c08f9bb5
+          :   :   |execute-commands! 39.221µs
+          :   :   |execute           264.591µs
+  "
+  [execution-fn]
+  (let [stats-state (atom {})
+        result
+        (binding [*execute-config*
+                  {;; :debug-result true
+                   :hook-execute-end
+                   (fn [e]
+                     (swap! stats-state
+                       (fn [s]
+                         (update-in s (:stack *execute-internals*)
+                           #(merge % {:stats (:stats e)})))))}]
+          (execution-fn))]
+    (flamegraph @stats-state)
+    result))
