@@ -1,4 +1,4 @@
-# 1.1.0
+# 1.0.6
 
 ADDED `print-trace` in `commando.impl.utils` — replaces `print-deep-stats` with an improved flamegraph that also shows per-node instruction keys and optional title. Add `:__title` or `"__title"` to any instruction's top level to annotate that node in the output. `print-deep-stats` is kept as a deprecated alias.
 
