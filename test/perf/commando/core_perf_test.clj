@@ -221,7 +221,8 @@
 
          :instruction-A (commando.commands.query-dsl/resolve-instruction
                           "error"
-                          {:commando/fn (fn [& [y]]
+                          {:__title "Resolve instruction-A"
+                           :commando/fn (fn [& [y]]
                                           {:a
                                            {:b {:c y}
                                             :d {:c (inc y)
@@ -231,11 +232,13 @@
 
          :query-A (commando.commands.query-dsl/resolve-instruction-qe
                     "error"
-                    {:commando/resolve :query-A
+                    {:__title "Resolve query-A"
+                     :commando/resolve :query-A
                      :x 1})
          :query-B (commando.commands.query-dsl/resolve-instruction-qe
                     "error"
-                    {:commando/resolve :query-B
+                    {:__title "Resolve query-B"
+                     :commando/resolve :query-B
                      :x 1})}
       (commando.commands.query-dsl/->query-run QueryExpression))))
 
@@ -243,12 +246,13 @@
   (println "\n===================Benchmark=====================")
   (println "Run commando/execute in depth with using queryDSL")
   (println "=================================================")
-  (commando-utils/print-deep-stats
+  (commando-utils/print-trace
     #(commando.core/execute
        [commando.commands.query-dsl/command-resolve-spec
         commando.commands.builtin/command-from-spec
         commando.commands.builtin/command-fn-spec]
-       {:commando/resolve :query-A
+       {:__title "TOPLEVEL"
+        :commando/resolve :query-A
         :x 1
         :QueryExpression
         [{:map
