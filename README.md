@@ -20,6 +20,7 @@
 	- [command-apply-spec](#command-apply-spec)
 	- [command-mutation-spec](#command-mutation-spec)
 	- [command-macro-spec](#command-macro-spec)
+  - [command-context-spec](#command-context-spec)
   - [Adding New Commands](#adding-new-commands)
 - [Status-Map and Internals](#status-map-and-internals)
   - [Configuring Execution Behavior](#configuring-execution-behavior)
@@ -304,6 +305,34 @@ command-macro-spec detects entries with `:commando/macro` and calls the multimet
 The defmethod should return a Instruction. Commando will then treat that returned map as a fully separate instruction: dependencies (like `:commando/from`) are discovered inside the macro hierarchy.
 
 Use these macro handlers to hide repeated command structure and keep your instructions shorter and easier to read.
+
+#### command-context-spec
+
+Injects external reference data (dictionaries, config, feature flags) into instructions without duplicating it. Unlike other commands, `command-context-spec` is a **function** — call it with your context map to get a CommandMapSpec. The data is captured via closure and resolves before other commands (`{:mode :none}`), so `:commando/from` and `:commando/fn` can reference context results through the standard dependency mechanism.
+
+```clojure
+(def game-config
+  {:heroes   {"warrior" {:hp 120 :damage 15}
+              "mage"    {:hp 80  :damage 25}}
+   :buffs    {:fire-sword 1.5 :shield 2.0}
+   :settings {:difficulty "hard" :max-level 60}})
+
+(commando/execute
+  [(commands-builtin/command-context-spec game-config)
+   commands-builtin/command-from-spec
+   commands-builtin/command-fn-spec]
+  {:warrior     {:commando/context [:heroes "warrior"]}
+   :fire-bonus  {:commando/context [:buffs :fire-sword]}
+   :hit-damage  {:commando/fn * :args [{:commando/from [:warrior] := :damage}
+                                        {:commando/from [:fire-bonus]}]}
+   :arena-name  {:commando/context [:arenas :default] :default "Colosseum"}})
+;; => {:warrior {:hp 120 :damage 15}
+;;     :fire-bonus 1.5
+;;     :hit-damage 22.5
+;;     :arena-name "Colosseum"}
+```
+
+Missing path returns `nil`; use `:default` for an explicit fallback. The `:=` key applies a transform to the resolved value, same as in `:commando/from`. String-key form (`"commando-context"`, `"default"`, `"="`) is available for JSON compatibility.
 
 ### Adding new commands
 

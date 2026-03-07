@@ -201,6 +201,108 @@
                               "commando-from"]}})
 
 ;; ======================
+;; Context
+;; ======================
+
+(defn command-context-spec
+  "Creates a CommandMapSpec that resolves references to external context data
+   captured via closure. Context is immutable per registry and resolves before
+   other commands (dependency mode :none).
+
+   ctx — a map with arbitrary structure to look up values from.
+
+   Instruction usage (keyword keys):
+     {:commando/context [:path :to :data]}
+     {:commando/context [:path :to :data] := :key}
+     {:commando/context [:path :to :data] :default 0}
+
+   Instruction usage (string keys, JSON-compatible):
+     {\"commando-context\" [\"path\" \"to\" \"data\"]}
+     {\"commando-context\" [\"path\" \"to\" \"data\"] \"=\" \"key\"}
+     {\"commando-context\" [\"path\" \"to\" \"data\"] \"default\" 0}
+
+   Parameters:
+     :commando/context — sequential path for get-in on ctx
+     := — optional transform function/keyword applied to the resolved value
+     :default — optional fallback value when path is not found in ctx.
+                 Without :default, missing path throws an error.
+
+   Example:
+     (def my-ctx {:rates {:vat 0.20} :codes {\"01\" \"Kyiv\"}})
+
+     (:instruction
+      (commando/execute
+        [(command-context-spec my-ctx)
+         command-from-spec command-fn-spec]
+        {:vat     {:commando/context [:rates :vat]}
+         :city    {:commando/context [:codes \"01\"]}
+         :missing {:commando/context [:nonexistent] :default \"N/A\"}
+         :total   {:commando/fn * :args [{:commando/from [:vat]} 1000]}}))
+     ;; => {:vat 0.20 :city \"Kyiv\" :missing \"N/A\" :total 200.0}
+
+   See Also
+     `commando.core/execute`
+     `commando.commands.builtin/command-from-spec`"
+  [ctx]
+  {:pre [(map? ctx)]}
+  (let [kw-key :commando/context
+        str-key "commando-context"]
+    {:type kw-key
+     :recognize-fn #(and (map? %)
+                      (or (contains? % kw-key)
+                          (contains? % str-key)))
+     :validate-params-fn
+     (fn [m]
+       (let [m-explain
+             (cond
+               (and (contains? m kw-key) (contains? m str-key))
+               "The keyword :commando/context and the string \"commando-context\" cannot be used simultaneously in one command."
+               (contains? m kw-key)
+               (malli-error/humanize
+                 (malli/explain
+                   [:map
+                    [kw-key [:sequential {:error/message "commando/context should be a sequential path: [:some :key]"}
+                             [:or :string :keyword :int]]]
+                    [:= {:optional true} [:or utils/ResolvableFn :string]]
+                    [:default {:optional true} :any]]
+                   m))
+               (contains? m str-key)
+               (malli-error/humanize
+                 (malli/explain
+                   [:map
+                    [str-key [:sequential {:error/message "commando-context should be a sequential path: [\"some\" \"key\"]"}
+                              [:or :string :keyword :int]]]
+                    ["=" {:optional true} [:string {:min 1}]]
+                    ["default" {:optional true} :any]]
+                   m)))]
+         (if m-explain m-explain true)))
+     :apply
+     (fn [_instruction _command-path-obj command-map]
+       (let [[path m-= m-default has-default?]
+             (cond
+               (contains? command-map kw-key)
+               [(get command-map kw-key)
+                (:= command-map)
+                (:default command-map)
+                (contains? command-map :default)]
+               (contains? command-map str-key)
+               [(get command-map str-key)
+                (get command-map "=")
+                (get command-map "default")
+                (or (contains? command-map "default")
+                    (contains? command-map :default))])
+             result (get-in ctx path ::not-found)]
+         (if (= result ::not-found)
+           (if has-default? m-default nil)
+           (if m-=
+             (if (string? m-=)
+               (get result m-=)
+               (let [resolved (utils/resolve-fn m-=)]
+                 (resolved result)))
+             result))))
+     :dependencies {:mode :none}}))
+
+;; ======================
 ;; Mutation
 ;; ======================
 
