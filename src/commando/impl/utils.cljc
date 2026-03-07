@@ -98,7 +98,7 @@
    See
      `commando.core/execute`
      `commando.core/execute-commands!`(binding)"
-  [] (or *command-map-spec-registry* []))
+  [] (or *command-map-spec-registry* {}))
 
 ;; ------------------
 ;; Function Resolvers

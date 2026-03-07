@@ -17,8 +17,8 @@
     (is (=
           {:vec1 [1 2 3], :vec2 [3 2 1], :result-simple 10, :result-with-deps 10}
           (:instruction
-            (commando/execute [command-builtin/command-fn-spec
-                               command-builtin/command-from-spec]
+            (commando/execute {:commando/fn command-builtin/command-fn-spec
+                               :commando/from command-builtin/command-from-spec}
               {:vec1 [1 2 3]
                :vec2 [3 2 1]
                :result-simple {:commando/fn (fn [& [v1 v2]] (reduce + (map * v1 v2)))
@@ -34,7 +34,7 @@
         (binding [commando-utils/*execute-config*
                   {:debug-result false
                    :error-data-string false}]
-          (commando/execute [command-builtin/command-fn-spec]
+          (commando/execute {:commando/fn command-builtin/command-fn-spec}
             {:commando/fn "STRING"
              :args [[1 2 3] [3 2 1]]}))
         (fn [error]
@@ -53,7 +53,7 @@
         (binding [commando-utils/*execute-config*
                   {:debug-result false
                    :error-data-string false}]
-          (commando/execute [command-builtin/command-fn-spec]
+          (commando/execute {:commando/fn command-builtin/command-fn-spec}
             {:commando/fn (fn [& [v1 v2]] (reduce + (map * v1 v2)))
              :args "BROKEN"}))
         (fn [error]
@@ -73,8 +73,8 @@
     (is (=
           {:value 1, :result-simple 2, :result-with-deps 2}
           (:instruction
-           (commando/execute [command-builtin/command-apply-spec
-                              command-builtin/command-from-spec]
+           (commando/execute {:commando/apply command-builtin/command-apply-spec
+                              :commando/from command-builtin/command-from-spec}
              {:value 1
               :result-simple {:commando/apply {:value 1}
                               := (fn [e] (-> e :value inc))}
@@ -87,7 +87,7 @@
         (binding [commando-utils/*execute-config*
                   {:debug-result false
                    :error-data-string false}]
-          (commando/execute [command-builtin/command-apply-spec]
+          (commando/execute {:commando/apply command-builtin/command-apply-spec}
             {:commando/apply {:value 1}
              := "STRING"}))
         (fn [error]
@@ -113,8 +113,8 @@
   (testing "Successfull test cases"
     (is (= {:a 1, :vec 1, :vec-map 1, :result-of-another 1}
           (get-in
-            (commando/execute [command-builtin/command-fn-spec
-                               command-builtin/command-from-spec]
+            (commando/execute {:commando/fn command-builtin/command-fn-spec
+                               :commando/from command-builtin/command-from-spec}
               {"values" {:a 1
                          :vec [1]
                          :vec-map [{:a 1}]
@@ -132,7 +132,7 @@
             :d {:result [4 4]},
             :e {:result [5 5]}}
           (:instruction
-           (commando/execute [command-builtin/command-from-spec]
+           (commando/execute {:commando/from command-builtin/command-from-spec}
              {:a {:value 1
                   :result {:commando/from ["../" :value]}}
               :b {:value 2
@@ -150,7 +150,7 @@
             "d" {"result" [4 4]},
             "e" {"result" [5 5]}}
           (:instruction
-           (commando/execute [command-builtin/command-from-spec]
+           (commando/execute {:commando/from command-builtin/command-from-spec}
              {"a" {"value" 1
                    "result" {"commando-from" ["../" "value"]}}
               "b" {"value" 2
@@ -165,8 +165,8 @@
     #?(:clj
        (is (= {:=-keyword 1, :=-fn 2, :=-symbol 2, :=-var 2}
              (get-in
-               (commando/execute [command-builtin/command-fn-spec
-                                  command-builtin/command-from-spec]
+               (commando/execute {:commando/fn command-builtin/command-fn-spec
+                                  :commando/from command-builtin/command-from-spec}
                  {"value" {:kwd 1}
                   "result" {:=-keyword {:commando/from ["value" ] := :kwd}
                             :=-fn {:commando/from ["value"] := (fn [{:keys [kwd]}] (inc kwd))}
@@ -177,8 +177,8 @@
          "Uncorrect commando/from ':=' applicator. CLJ Supports: fn/keyword/var/symbol")
        :cljs (is (= {:=-keyword 1, :=-fn 2}
                    (get-in
-                     (commando/execute [command-builtin/command-fn-spec
-                                        command-builtin/command-from-spec]
+                     (commando/execute {:commando/fn command-builtin/command-fn-spec
+                                        :commando/from command-builtin/command-from-spec}
                        {"value" {:kwd 1}
                         "result" {:=-keyword {:commando/from ["value" ] := :kwd}
                                   :=-fn {:commando/from ["value"] := (fn [{:keys [kwd]}] (inc kwd))}}})
@@ -189,7 +189,7 @@
   (testing "Anchor navigation"
     (is (= {:section {:__anchor "root" :price 10 :ref 10}}
            (:instruction
-            (commando/execute [command-builtin/command-from-spec]
+            (commando/execute {:commando/from command-builtin/command-from-spec}
               {:section {:__anchor "root"
                          :price 10
                          :ref {:commando/from ["@root" :price]}}})))
@@ -197,7 +197,7 @@
     (is (= {:items [{:__anchor "item" :price 10 :ref 10}
                     {:__anchor "item" :price 20 :ref 20}]}
            (:instruction
-            (commando/execute [command-builtin/command-from-spec]
+            (commando/execute {:commando/from command-builtin/command-from-spec}
               {:items [{:__anchor "item"
                         :price 10
                         :ref {:commando/from ["@item" :price]}}
@@ -209,7 +209,7 @@
                       :base-price 5
                       :section {:__anchor "section" :price 10 :sibling-price 5}}}
            (:instruction
-            (commando/execute [command-builtin/command-from-spec]
+            (commando/execute {:commando/from command-builtin/command-from-spec}
               {:catalog {:__anchor "root"
                          :base-price 5
                          :section {:__anchor "section"
@@ -226,7 +226,7 @@
               {:price-1 5
                :price-2 10}}}}
           (:instruction
-           (commando/execute [command-builtin/command-from-spec]
+           (commando/execute {:commando/from command-builtin/command-from-spec}
              {:root-1
               {:__anchor "root-1"
                :price 5
@@ -241,7 +241,7 @@
   (testing "Failure test cases"
     (is
       (helpers/status-map-contains-error?
-        (commando/execute [command-builtin/command-from-spec]
+        (commando/execute {:commando/from command-builtin/command-from-spec}
           {:ref {:commando/from ["@nonexistent" :value]}})
         {:message "Commando. Point dependency failed: key ':commando/from' references non-existent path [\"@nonexistent\" :value]",
          :path [:ref],
@@ -249,7 +249,7 @@
       "Anchor not found: should produce error with :anchor key in data")
     (is
       (helpers/status-map-contains-error?
-        (commando/execute [command-builtin/command-from-spec]
+        (commando/execute {:commando/from command-builtin/command-from-spec}
           {"source" {:a 1 :b 2}
            "missing" {:commando/from ["UNEXISING"]}})
         {:message "Commando. Point dependency failed: key ':commando/from' references non-existent path [\"UNEXISING\"]",
@@ -258,7 +258,7 @@
       "Waiting on error, bacause commando/from seding to unexising path")
     (is
       (helpers/status-map-contains-error?
-        (commando/execute [command-builtin/command-from-spec]
+        (commando/execute {:commando/from command-builtin/command-from-spec}
           {"source" {:a 1 :b 2}
            "missing" {"commando-from" ["UNEXISING"]}})
         {:message "Commando. Point dependency failed: key 'commando-from' references non-existent path [\"UNEXISING\"]",
@@ -270,7 +270,7 @@
         (binding [commando-utils/*execute-config*
                   {:debug-result false
                    :error-data-string false}]
-          (commando/execute [command-builtin/command-from-spec]
+          (commando/execute {:commando/from command-builtin/command-from-spec}
             {"value" 1
              "result" {:commando/from ["value"]
                        "commando-from" ["value"]}}))
@@ -287,7 +287,7 @@
                     {:debug-result false
                      :error-data-string false}]
             (commando/execute
-              [command-builtin/command-from-spec]
+              {:commando/from command-builtin/command-from-spec}
               {:commando/from "BROKEN"}))
           (fn [error]
             (=
@@ -302,7 +302,7 @@
                     {:debug-result false
                      :error-data-string false}]
             (commando/execute
-              [command-builtin/command-from-spec]
+              {:commando/from command-builtin/command-from-spec}
               {:v 1
                :a {:commando/from [:v] := ["BROKEN"]}}))
           (fn [error]
@@ -335,8 +335,8 @@
     (is (=
           {:vector1 [1 2 3], :vector2 [3 2 1], :result-simple 10, :result-with-deps 10}
           (:instruction
-           (commando/execute [command-builtin/command-mutation-spec
-                              command-builtin/command-from-spec]
+           (commando/execute {:commando/mutation command-builtin/command-mutation-spec
+                              :commando/from command-builtin/command-from-spec}
              {:vector1 [1 2 3]
               :vector2 [3 2 1]
               :result-simple {:commando/mutation :dot-product
@@ -349,8 +349,8 @@
     (is (=
           {"vector1" [1 2 3], "vector2" [3 2 1], "result-simple" 10, "result-with-deps" 10}
           (:instruction
-           (commando/execute [command-builtin/command-mutation-spec
-                              command-builtin/command-from-spec]
+           (commando/execute {:commando/mutation command-builtin/command-mutation-spec
+                              :commando/from command-builtin/command-from-spec}
              {"vector1" [1 2 3]
               "vector2" [3 2 1]
               "result-simple" {"commando-mutation" "dot-product"
@@ -366,7 +366,7 @@
         (binding [commando-utils/*execute-config*
                   {:debug-result false
                    :error-data-string false}]
-          (commando/execute [command-builtin/command-mutation-spec]
+          (commando/execute {:commando/mutation command-builtin/command-mutation-spec}
             {:commando/mutation :dot-product
              "commando-mutation" "dot-product"
              "vector1" [1 2 3]
@@ -388,7 +388,7 @@
         (binding [commando-utils/*execute-config*
                   {:debug-result false
                    :error-data-string false}]
-          (commando/execute [command-builtin/command-mutation-spec]
+          (commando/execute {:commando/mutation command-builtin/command-mutation-spec}
             {:commando/mutation (fn [] "BROKEN")}))
         (fn [error]
           (=
@@ -402,7 +402,7 @@
         (binding [commando-utils/*execute-config*
                   {:debug-result false
                    :error-data-string false}]
-          (commando/execute [command-builtin/command-mutation-spec]
+          (commando/execute {:commando/mutation command-builtin/command-mutation-spec}
             {:commando/mutation :dot-product
              :vector1 [1 "_" 3]
              :vector2 [3 2 1]}))
@@ -461,10 +461,10 @@
         {:vector-dot-1 32, :vector-dot-2 320}
         (:instruction
          (commando/execute
-           [command-builtin/command-macro-spec
-            command-builtin/command-fn-spec
-            command-builtin/command-from-spec
-            command-builtin/command-apply-spec]
+           {:commando/macro command-builtin/command-macro-spec
+            :commando/fn command-builtin/command-fn-spec
+            :commando/from command-builtin/command-from-spec
+            :commando/apply command-builtin/command-apply-spec}
            {:vector-dot-1
             {:commando/macro :string-vectors-dot-product
              :vector1-str ["1" "2" "3"]
@@ -479,10 +479,10 @@
         {"vector-dot-1" 32, "vector-dot-2" 320}
         (:instruction
          (commando/execute
-           [command-builtin/command-macro-spec
-            command-builtin/command-fn-spec
-            command-builtin/command-from-spec
-            command-builtin/command-apply-spec]
+           {:commando/macro command-builtin/command-macro-spec
+            :commando/fn command-builtin/command-fn-spec
+            :commando/from command-builtin/command-from-spec
+            :commando/apply command-builtin/command-apply-spec}
            {"vector-dot-1"
             {"commando-macro" "string-vectors-dot-product"
              "vector1-str" ["1" "2" "3"]
@@ -499,10 +499,10 @@
                   {:debug-result false
                    :error-data-string false}]
           (commando/execute
-            [command-builtin/command-macro-spec
-             command-builtin/command-fn-spec
-             command-builtin/command-from-spec
-             command-builtin/command-apply-spec]
+            {:commando/macro command-builtin/command-macro-spec
+             :commando/fn command-builtin/command-fn-spec
+             :commando/from command-builtin/command-from-spec
+             :commando/apply command-builtin/command-apply-spec}
             {:commando/macro :string-vectors-dot-product
              "commando-macro" "string-vectors-dot-product"
              "vector1-str" ["1" "2" "3"]
@@ -524,7 +524,7 @@
         (binding [commando-utils/*execute-config*
                   {:debug-result false
                    :error-data-string false}]
-          (commando/execute [command-builtin/command-macro-spec]
+          (commando/execute {:commando/macro command-builtin/command-macro-spec}
             {:commando/macro (fn [])}))
         (fn [error]
           (=

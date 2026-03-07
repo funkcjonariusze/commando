@@ -44,7 +44,7 @@
   "Finds and validates a command from registry that matches the given `value`.
    Returns the command-spec if match is found and valid, nil otherwise.
    Throws exception if match is found but validation fails."
-  [command-registry value path]
+  [command-spec-vector value path]
   (some (fn [command-spec]
           (when (command? command-spec value)
             (let [value-valid-return (command-valid? command-spec value)]
@@ -69,31 +69,31 @@
                      :reason value-valid-return
                      :path path
                      :value value}))))))
-        command-registry))
+        command-spec-vector))
 
 (defn find-commands
   "Traverses the instruction tree (BFS algo) and collects all commands defined by the registry."
   [instruction command-registry]
-  (loop [queue (vec [[]])
-         found-commands []
-         debug-stack-map {}]
-    (if (empty? queue)
-      found-commands
-      (let [current-path (first queue)
-            remaining-paths (subvec queue 1)
-            current-value (get-in instruction current-path)
-            debug-stack (if (:debug-result (utils/execute-config)) (get debug-stack-map current-path (list)) (list))]
-        (if-let [command-spec (instruction-command-spec command-registry current-value current-path)]
-          (let [command (cm/->CommandMapPath
-                         current-path
-                         (if (:debug-result (utils/execute-config)) (merge command-spec {:__debug_stack debug-stack}) command-spec))
-                child-paths (command-child-paths command-spec current-value current-path)
-                updated-debug-stack-map (if (:debug-result (utils/execute-config))
-                                          (reduce #(assoc %1 %2 (conj debug-stack command)) debug-stack-map child-paths)
-                                          {})]
-            (recur (into remaining-paths child-paths) (conj found-commands command) updated-debug-stack-map))
-          ;; No match - traverse children if coll, skip if leaf
-          (recur (into remaining-paths (coll-child-paths current-value current-path))
-                 found-commands
-                 debug-stack-map))))))
-
+  (let [command-spec-vector (:registry-runtime command-registry)]
+    (loop [queue (vec [[]])
+           found-commands []
+           debug-stack-map {}]
+      (if (empty? queue)
+        found-commands
+        (let [current-path (first queue)
+              remaining-paths (subvec queue 1)
+              current-value (get-in instruction current-path)
+              debug-stack (if (:debug-result (utils/execute-config)) (get debug-stack-map current-path (list)) (list))]
+          (if-let [command-spec (instruction-command-spec command-spec-vector current-value current-path)]
+            (let [command (cm/->CommandMapPath
+                            current-path
+                            (if (:debug-result (utils/execute-config)) (merge command-spec {:__debug_stack debug-stack}) command-spec))
+                  child-paths (command-child-paths command-spec current-value current-path)
+                  updated-debug-stack-map (if (:debug-result (utils/execute-config))
+                                            (reduce #(assoc %1 %2 (conj debug-stack command)) debug-stack-map child-paths)
+                                            {})]
+              (recur (into remaining-paths child-paths) (conj found-commands command) updated-debug-stack-map))
+            ;; No match - traverse children if coll, skip if leaf
+            (recur (into remaining-paths (coll-child-paths current-value current-path))
+              found-commands
+              debug-stack-map)))))))

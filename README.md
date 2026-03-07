@@ -120,7 +120,7 @@ As Commando is simply a graph-based resolver with easy configuration, it is not 
 The above function composes "Instructions", "Commands", and a "CommandRegistry".
 - **Instruction**: a Clojure map, large or small, containing data and _commands_. The instruction describes the data structure and the transformations to apply.
 - **Command**: a data-lexeme that is evaluated and returns a result. The rules for parsing and executing commands are flexible and customizable. Command `:command/from` return value by the absolute or relative path, can optionally apply a function provided under the `:=` key.
-- **CommandRegistry**: a vector describing data-lexemes that should be treated as _commands_ by the library.
+- **CommandRegistry**: a vector or map of CommandMapSpecs describing data-lexemes that should be treated as _commands_ by the library. When passed as a vector, the order defines the command scan priority. You can also pre-build a registry with `registry-create` and pass it directly.
 
 ### Builtin Functionality
 
@@ -356,12 +356,10 @@ Let's create a new command using a CommandMapSpec configuration map:
 Now you can use it for more expressive operations like "summ=" and "multiply=" as shown below:
 
 ```clojure
+;; Vector form — order defines scan priority
 (def command-registry
-  (commando/create-registry
-	[;; Add `:commando/from`
-	 commands-builtin/command-from-spec
-	 ;; Add `:CALC=` command to be handled
-	 ;; inside instruction
+  (commando/registry-create
+	[commands-builtin/command-from-spec
 	 {:type :CALC=
 	  :recognize-fn #(and (map? %) (contains? % :CALC=))
 	  :validate-params-fn (fn [m]
@@ -371,6 +369,20 @@ Now you can use it for more expressive operations like "summ=" and "multiply=" a
 	  :apply (fn [_instruction _command m]
 				(apply (:CALC= m) (:ARGS m)))
 	  :dependencies {:mode :all-inside}}]))
+
+;; Map form — explicit type keys
+(def command-registry
+  (commando/registry-create
+	{:commando/from commands-builtin/command-from-spec
+	 :CALC=        {:type :CALC=
+	                :recognize-fn #(and (map? %) (contains? % :CALC=))
+	                :validate-params-fn (fn [m]
+	                                      (and
+	                                        (fn? (:CALC= m))
+	                                        (not-empty (:ARGS m))))
+	                :apply (fn [_instruction _command m]
+	                          (apply (:CALC= m) (:ARGS m)))
+	                :dependencies {:mode :all-inside}}}))
 
 (commando/execute
   command-registry

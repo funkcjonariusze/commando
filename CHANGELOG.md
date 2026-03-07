@@ -1,5 +1,18 @@
 # 1.0.6
 
+REDESIGNED Registry. Registry is now a map-based structure (`{:type spec, ...}`) instead of a plain vector. `registry-create` accepts both formats:
+```clojure
+;; vector — order = scan priority
+(registry-create [from-spec fn-spec])
+;; map — explicit keys
+(registry-create {:commando/from from-spec, :commando/fn fn-spec})
+```
+Built registry can be modified with `registry-assoc` / `registry-dissoc` without rebuilding from scratch.
+
+RENAMED `create-registry` → `registry-create`. Old name removed.
+
+REMOVED `build-compiler`. Compiler concept removed from the pipeline; optimizations for repeated `execute` calls will be introduced in a future version.
+
 ADDED `print-trace` in `commando.impl.utils` — replaces `print-deep-stats` with an improved flamegraph that also shows per-node instruction keys and optional title. Add `:__title` or `"__title"` to any instruction's top level to annotate that node in the output. `print-deep-stats` is kept as a deprecated alias.
 
 ADDED named anchor navigation for `:commando/from` paths. Declare an anchor with `"__anchor"` or `:__anchor` key in any instruction map, then reference it with `"@name"` as a path segment. The resolver walks up the tree and resolves to the nearest ancestor with that anchor name — independent of nesting depth. Anchors can be combined with existing `"../"` relative navigation in a single path.
