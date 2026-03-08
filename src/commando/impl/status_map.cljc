@@ -54,4 +54,25 @@
 
 (defn ok? [status-map] (= (:status status-map) :ok))
 
+;; --------------------
+;; Core Pipeline Helper
+;; --------------------
+
+(defn core-step-safe
+  "Executes a pipeline step with skip-on-failure, error safety net, and timing.
+   step-fn receives the status-map and must return an updated status-map.
+   If status is :failed, the step is skipped with a warning.
+   Uncaught exceptions are converted to :failed status."
+  [status-map step-name step-fn]
+  (let [start (utils/now)
+        result (if (failed? status-map)
+                 (status-map-handle-warning status-map
+                   {:message (str "Skipping " step-name)})
+                 (try
+                   (step-fn status-map)
+                   (catch #?(:clj Exception :cljs :default) e
+                     (status-map-handle-error status-map
+                       {:message (str "Failed at " step-name ". See error for details.")
+                        :error (utils/serialize-exception e)}))))]
+    (status-map-add-measurement result step-name start (utils/now))))
 
