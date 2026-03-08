@@ -67,13 +67,13 @@
    Returns the path vector to that ancestor, or nil if not found."
   [instruction current-path anchor-name]
   (loop [path (vec current-path)]
-    (when (seq path)
-      (let [node (get-in instruction path)]
-        (if (and (map? node)
-                 (= anchor-name (or (get node "__anchor")
-                                    (get node :__anchor))))
-          path
-          (recur (vec (butlast path))))))))
+    (let [node (get-in instruction path)]
+      (if (and (map? node)
+               (= anchor-name (or (get node "__anchor")
+                                  (get node :__anchor))))
+        path
+        (when (seq path)
+          (recur (pop path)))))))
 
 (defn resolve-relative-path
   "Resolves path segments with relative navigation against a base path.
