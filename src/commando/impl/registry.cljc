@@ -46,17 +46,17 @@
 (def ^:private default-command-value-spec
   {:type :instruction/_value
    :recognize-fn any?
-   :apply (fn [_ _ _m] (throw (ex-info "Command :instruction/value should not be evaluated" {})))
+   :apply (fn [_ _ _m] (throw (ex-info "Command :instruction/_value should not be evaluated" {})))
    :dependencies {:mode :none}})
 (def ^:private default-command-map-spec
   {:type :instruction/_map
    :recognize-fn map?
-   :apply (fn [_ _ _m] (throw (ex-info "Command :instruction/map should not be evaluated" {})))
+   :apply (fn [_ _ _m] (throw (ex-info "Command :instruction/_map should not be evaluated" {})))
    :dependencies {:mode :all-inside}})
 (def ^:private default-command-vec-spec
   {:type :instruction/_vec
    :recognize-fn vector?
-   :apply (fn [_ _ _m] (throw (ex-info "Command :instruction/vec should not be evaluated" {})))
+   :apply (fn [_ _ _m] (throw (ex-info "Command :instruction/_vec should not be evaluated" {})))
    :dependencies {:mode :all-inside}})
 
 (def ^:private internal-command-specs

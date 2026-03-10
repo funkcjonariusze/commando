@@ -25,7 +25,7 @@
    - `:apply` - a function to execute the command:
         (fn [instruction command-map-obj command-data] ...)
    - `:dependencies` - declare way the command should build dependency
-        {:mode :all-inside} - all commands inside the current map are depednencies
+        {:mode :all-inside} - all commands inside the current map are dependencies
         {:mode :none} - no dependencies, the other commands may depend from it.
         {:mode :point :point-key [:commando/from]} - special type of dependency
              which declare that current command depends from the command it refer by
@@ -33,8 +33,8 @@
 
    Additional optional keys can include:
    - `:validate-params-fn` - a function to validate command structures, and catch
-          invalid parameters at the anylisis stage. Only if the function
-          return 'true' it ment that the command structure is valid.
+          invalid parameters at the analysis stage. Only if the function
+          return 'true' it meant that the command structure is valid.
           (fn [data] (throw ...))        => Failure
           (fn [data] {:reason \"why\"})  => Failure
           (fn [data] nil )               => Failure
