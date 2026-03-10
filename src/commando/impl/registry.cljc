@@ -134,7 +134,7 @@
   [built-registry command-map-spec-type command-map-spec]
   (let [new-specs (assoc (:registry built-registry) command-map-spec-type command-map-spec)
         old-order (:registry-order built-registry)
-        new-order (if (some #{command-map-spec-type} old-order)
+        new-order (if (some #(= % command-map-spec-type) old-order)
                     old-order
                     (conj old-order command-map-spec-type))]
     (build new-specs {:registry-order new-order})))
