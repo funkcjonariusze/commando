@@ -1,6 +1,5 @@
 (ns commando.core
   (:require
-   [commando.impl.command-map      :as cm]
    [commando.impl.dependency       :as deps]
    [commando.impl.executing        :as executing]
    [commando.impl.finding-commands :as finding-commands]
