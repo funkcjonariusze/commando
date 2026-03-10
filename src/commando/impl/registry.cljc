@@ -106,7 +106,7 @@
            {:errors (:errors validation)
             :registry specs-map}))))))
 
-(defn enreach-runtime-registry [built-registry]
+(defn enrich-runtime-registry [built-registry]
   (let [registry        (:registry built-registry)
         registry-order  (:registry-order built-registry)]
     (assoc built-registry

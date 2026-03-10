@@ -21,7 +21,7 @@
     {:commando/from cmds-builtin/command-from-spec
      :test/add-id test-add-id-command}
     (commando-registry/build)
-    (commando-registry/enreach-runtime-registry)))
+    (commando-registry/enrich-runtime-registry)))
 
 (def fail-validation-command
   {:type :fail-validation

@@ -98,7 +98,7 @@
                                 (assoc :registry
                                   (->
                                     (registry-create registry)
-                                    (registry/enreach-runtime-registry))))
+                                    (registry/enrich-runtime-registry))))
                               (catch #?(:clj Exception
                                         :cljs :default)
                                   e
