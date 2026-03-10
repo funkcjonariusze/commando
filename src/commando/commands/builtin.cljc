@@ -60,15 +60,15 @@
 
 (def ^{:doc "
   Description
-    command-apply-spec - Apply `:=` function/symbol/keyword
-    to value passed inside `:commando/apply`
+    command-apply-spec - Returns value of `:commando/apply`.
+    Use `:=>` driver to post-process the result.
 
   Example
     (:instruction
       (commando/execute
         [command-apply-spec]
         {:commando/apply {:value 10}
-         := :value}))
+         :=> [:get :value]}))
      ;; => 10
 
    See Also
@@ -80,15 +80,11 @@
    :validate-params-fn (fn [m]
                          (if-let [m-explain
                                   (malli-error/humanize
-                                    (malli/explain
-                                      [:map [:commando/apply :any]
-                                       [:= utils/ResolvableFn]] m))]
+                                    (malli/explain [:map [:commando/apply :any]] m))]
                            m-explain
                            true))
    :apply (fn [_instruction _command-path-obj command-map]
-            (let [result (:commando/apply command-map)
-                  result (let [m-= (utils/resolve-fn (:= command-map))] (if m-= (m-= result) result))]
-              result))
+            (:commando/apply command-map))
    :dependencies {:mode :all-inside}})
 
 ;; ======================
@@ -121,7 +117,7 @@
          {:commando/fn (fn [& values] (apply + values))
           :args [1 2 3]}
          \"value-incremented\"
-         {:commando/from [\"value\"] := inc}}))
+         {:commando/from [\"value\"] :=> [:fn inc]}}))
       => {\"value\" 6, \"value-incremented\" 7}
 
     (:instruction
@@ -135,12 +131,12 @@
     (:instruction
      (commando/execute [command-from-spec]
        {\"a\" {\"value\" {\"container\" 1}
-            \"result\" {\"commando-from\" [\"../\" \"value\"] \"=\" \"container\"}}
+            \"result\" {\"commando-from\" [\"../\" \"value\"] \"=>\" [\"get\" \"container\"]}}
         \"b\" {\"value\" {\"container\" 2}
-            \"result\" {\"commando-from\" [\"../\" \"value\"] \"=\" \"container\"}}}))
+            \"result\" {\"commando-from\" [\"../\" \"value\"] \"=>\" [\"get\" \"container\"]}}}))
 
       => /{\"a\" {\"value\" {\"container\" 1}, \"result\" 1},
-         / \"b\" {\"value\" {\"container\" 2}, \"result\" 2}} 
+         / \"b\" {\"value\" {\"container\" 2}, \"result\" 2}}
 
    See Also
      `commando.core/execute`
@@ -162,40 +158,19 @@
                                  (contains? m :commando/from)
                                  (malli-error/humanize
                                    (malli/explain
-                                     [:map
-                                      [:commando/from -malli:commando-from-path]
-                                      [:= {:optional true} [:or utils/ResolvableFn :string]]]
+                                     [:map [:commando/from -malli:commando-from-path]]
                                      m))
                                  (contains? m "commando-from")
                                  (malli-error/humanize
                                    (malli/explain
-                                     [:map
-                                      ["commando-from" -malli:commando-from-path]
-                                      ["=" {:optional true} [:string {:min 1}]]]
+                                     [:map ["commando-from" -malli:commando-from-path]]
                                      m)))]
                            (if m-explain
                              m-explain
                              true)))
-   :apply (fn [instruction command-path-obj command-map]
-            (cond
-              (contains? command-map :commando/from)
-              (let [path-to-another-command (deps/point-target-path instruction command-path-obj)
-                    result (get-in instruction path-to-another-command)
-                    result (let [m-= (:= command-map)]
-                             (if m-= (if (string? m-=)
-                                       (get result m-=)
-                                       (let [m-= (utils/resolve-fn m-=)]
-                                         (m-= result))) result))]
-                result)
-              (contains? command-map "commando-from")
-              (let [path-to-another-command (deps/point-target-path instruction command-path-obj)
-                    result (get-in instruction path-to-another-command)
-                    result (if-let [m-= (get command-map "=")]
-                             (if (string? m-=)
-                               (get result m-=)
-                               result)
-                             result)]
-                result)))
+   :apply (fn [instruction command-path-obj _command-map]
+            (let [path-to-another-command (deps/point-target-path instruction command-path-obj)]
+              (get-in instruction path-to-another-command)))
    :dependencies {:mode :point
                   :point-key [:commando/from
                               "commando-from"]}})
@@ -213,17 +188,17 @@
 
    Instruction usage (keyword keys):
      {:commando/context [:path :to :data]}
-     {:commando/context [:path :to :data] := :key}
+     {:commando/context [:path :to :data] :=> [:get :key]}
      {:commando/context [:path :to :data] :default 0}
 
    Instruction usage (string keys, JSON-compatible):
      {\"commando-context\" [\"path\" \"to\" \"data\"]}
-     {\"commando-context\" [\"path\" \"to\" \"data\"] \"=\" \"key\"}
+     {\"commando-context\" [\"path\" \"to\" \"data\"] \"=>\" [\"get\" \"key\"]}
      {\"commando-context\" [\"path\" \"to\" \"data\"] \"default\" 0}
 
    Parameters:
      :commando/context — sequential path for get-in on ctx
-     := — optional transform function/keyword applied to the resolved value
+     :=> — optional driver for post-processing [:get :key], [:fn inc], etc.
      :default — optional fallback value when path is not found in ctx.
                  Without :default, missing path throws an error.
 
@@ -263,7 +238,6 @@
                    [:map
                     [kw-key [:sequential {:error/message "commando/context should be a sequential path: [:some :key]"}
                              [:or :string :keyword :int]]]
-                    [:= {:optional true} [:or utils/ResolvableFn :string]]
                     [:default {:optional true} :any]]
                    m))
                (contains? m str-key)
@@ -272,34 +246,21 @@
                    [:map
                     [str-key [:sequential {:error/message "commando-context should be a sequential path: [\"some\" \"key\"]"}
                               [:or :string :keyword :int]]]
-                    ["=" {:optional true} [:string {:min 1}]]
                     ["default" {:optional true} :any]]
                    m)))]
          (if m-explain m-explain true)))
      :apply
      (fn [_instruction _command-path-obj command-map]
-       (let [[path m-= m-default has-default?]
-             (cond
-               (contains? command-map kw-key)
-               [(get command-map kw-key)
-                (:= command-map)
-                (:default command-map)
-                (contains? command-map :default)]
-               (contains? command-map str-key)
-               [(get command-map str-key)
-                (get command-map "=")
-                (get command-map "default")
-                (or (contains? command-map "default")
-                    (contains? command-map :default))])
+       (let [path (or (get command-map kw-key) (get command-map str-key))
+             has-default? (or (contains? command-map :default)
+                              (contains? command-map "default"))
+             m-default (if (contains? command-map :default)
+                         (:default command-map)
+                         (get command-map "default"))
              result (get-in ctx path ::not-found)]
          (if (= result ::not-found)
            (if has-default? m-default nil)
-           (if m-=
-             (if (string? m-=)
-               (get result m-=)
-               (let [resolved (utils/resolve-fn m-=)]
-                 (resolved result)))
-             result))))
+           result)))
      :dependencies {:mode :none}}))
 
 ;; ======================

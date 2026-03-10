@@ -6,7 +6,8 @@
    [commando.impl.graph            :as graph]
    [commando.impl.registry         :as registry]
    [commando.impl.status-map       :as smap]
-   [commando.impl.utils            :as utils]))
+   [commando.impl.utils            :as utils]
+   [commando.driver.builtin]))
 
 ;; -- Registry API --
 

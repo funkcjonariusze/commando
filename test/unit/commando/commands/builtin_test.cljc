@@ -77,29 +77,10 @@
                               :commando/from command-builtin/command-from-spec}
              {:value 1
               :result-simple {:commando/apply {:value 1}
-                              := (fn [e] (-> e :value inc))}
+                              :=> [:fn (fn [e] (-> e :value inc))]}
               :result-with-deps {:commando/apply {:commando/from [:value]}
-                                 := inc}})))
-      "Uncorrectly processed :commando/apply"))
-  (testing "Failure test cases"
-    (is
-      (helpers/status-map-contains-error?
-        (binding [commando-utils/*execute-config*
-                  {:debug-result false
-                   :error-data-string false}]
-          (commando/execute {:commando/apply command-builtin/command-apply-spec}
-            {:commando/apply {:value 1}
-             := "STRING"}))
-        (fn [error]
-          (=
-            (-> error :error :data)
-            {:command-type :commando/apply,
-             :reason
-             {:= [#?(:clj "Expected a fn, var of fn, symbol resolving to a fn"
-                     :cljs "Expected a fn")]},
-             :path [],
-             :value {:commando/apply {:value 1}, := "STRING"}})))
-      "Waiting on error, bacause commando/fn has wrong type for :commando/fn")))
+                                 :=> [:fn inc]}})))
+      "Uncorrectly processed :commando/apply")))
 
 ;; ===========================
 ;; FROM-SPEC
@@ -160,28 +141,26 @@
                              {"commando-from" ["./" "../" 0]}]}})))
       "Uncorrect extracting \"commando-from\" by relative path")
     #?(:clj
-       (is (= {:=-keyword 1, :=-fn 2, :=-symbol 2, :=-var 2}
+       (is (= {:get-kwd 1, :fn-fn 2, :fn-symbol 2, :fn-var 2}
              (get-in
                (commando/execute {:commando/fn command-builtin/command-fn-spec
                                   :commando/from command-builtin/command-from-spec}
                  {"value" {:kwd 1}
-                  "result" {:=-keyword {:commando/from ["value" ] := :kwd}
-                            :=-fn {:commando/from ["value"] := (fn [{:keys [kwd]}] (inc kwd))}
-                            :=-symbol {:commando/from ["value" :kwd] := 'inc}
-                            :=-var {:commando/from ["value" :kwd] := #'inc}}})
-               [:instruction "result"])
-             )
-         "Uncorrect commando/from ':=' applicator. CLJ Supports: fn/keyword/var/symbol")
-       :cljs (is (= {:=-keyword 1, :=-fn 2}
+                  "result" {:get-kwd {:commando/from ["value"] :=> [:get :kwd]}
+                            :fn-fn {:commando/from ["value"] :=> [:fn (fn [{:keys [kwd]}] (inc kwd))]}
+                            :fn-symbol {:commando/from ["value" :kwd] :=> [:fn 'inc]}
+                            :fn-var {:commando/from ["value" :kwd] :=> [:fn #'inc]}}})
+               [:instruction "result"]))
+         "commando/from :=> drivers. CLJ: :get/:fn with fn/keyword/var/symbol")
+       :cljs (is (= {:get-kwd 1, :fn-fn 2}
                    (get-in
                      (commando/execute {:commando/fn command-builtin/command-fn-spec
                                         :commando/from command-builtin/command-from-spec}
                        {"value" {:kwd 1}
-                        "result" {:=-keyword {:commando/from ["value" ] := :kwd}
-                                  :=-fn {:commando/from ["value"] := (fn [{:keys [kwd]}] (inc kwd))}}})
-                     [:instruction "result"])
-                   )
-               "Uncorrect commando/from ':=' applicator. CLJS Supports: fn/keyword")))
+                        "result" {:get-kwd {:commando/from ["value"] :=> [:get :kwd]}
+                                  :fn-fn {:commando/from ["value"] :=> [:fn (fn [{:keys [kwd]}] (inc kwd))]}}})
+                     [:instruction "result"]))
+               "commando/from :=> drivers. CLJS: :get/:fn with fn/keyword")))
   ;; -------------------
   (testing "Anchor navigation"
     (is (= {:section {:__anchor "root" :price 10 :ref 10}}
@@ -294,23 +273,7 @@
                :value {:commando/from "BROKEN"}
                :reason {:commando/from ["commando/from should be a sequence path to value in Instruction: [:some 2 \"value\"]"]}})))
       "Waiting on error, ':validate-params-fn' for commando/from. Corrupted path \"BROKEN\" ")
-    (is (helpers/status-map-contains-error?
-          (binding [commando-utils/*execute-config*
-                    {:debug-result false
-                     :error-data-string false}]
-            (commando/execute
-              {:commando/from command-builtin/command-from-spec}
-              {:v 1
-               :a {:commando/from [:v] := ["BROKEN"]}}))
-          (fn [error]
-            (=
-              (-> error :error :data)
-              {:command-type :commando/from,
-               :reason {:= [#?(:clj "Expected a fn, var of fn, symbol resolving to a fn"
-                               :cljs "Expected a fn")
-                            "should be a string"]},
-               :path [:a], :value {:commando/from [:v], := ["BROKEN"]}})))
-      "Waiting on error, ':validate-params-fn' for commando/from. Wrong type for optional ':=' applicator")))
+))
 
 ;; ===========================
 ;; CONTEXT-SPEC
@@ -335,9 +298,9 @@
       (is (= {:val "#0000FF" :count 2}
             (:instruction
              (commando/execute {:commando/context ctx-spec}
-               {:count {:commando/context [:colors] := count}
-                :val {:commando/context [:colors] := :blue}})))
-        "Should apply := fn to resolved value")
+               {:count {:commando/context [:colors] :=> [:fn count]}
+                :val {:commando/context [:colors] :=> [:get :blue]}})))
+        "Should apply :=> driver to resolved value")
 
       (is (= {:val-default "fallback" :val-nil nil}
             (:instruction
@@ -348,11 +311,11 @@
 
       (let [str-ctx {"lang" {"ua" "Ukrainian" "en" "English"}}
             str-spec (command-builtin/command-context-spec str-ctx)]
-        (is (= {"val" "Ukrainian" "val-default" "none" "val-=" "English"}
+        (is (= {"val" "Ukrainian" "val-default" "none" "val-get" "English"}
               (:instruction
                (commando/execute {:commando/context str-spec}
                  {"val"          {"commando-context" ["lang" "ua"]}
-                  "val-="        {"commando-context" ["lang"] "=" "en"}
+                  "val-get"      {"commando-context" ["lang"] "=>" ["get" "en"]}
                   "val-default"  {"commando-context" ["missing"] "default" "none"}})))
           "String keys test")))
     (testing "Failure test cases"
@@ -492,7 +455,7 @@
 ;; ===========================
 
 (defn string-vector-dot-product [vector1-str vector2-str]
-  {:= :dot-product
+  {:=> [:get :dot-product]
    :commando/apply
    {:vector1-str vector1-str
     :vector2-str vector2-str
