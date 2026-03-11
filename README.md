@@ -369,7 +369,7 @@ If no `:=>` is specified, the default driver is `:get-in` with no params, which 
 
 #### Built-in Drivers
 
-**`:identity`** — pass-thought behavior (enabled by default):
+**`:identity`** — pass-through behavior (enabled by default):
 
 ```clojure
 {:commando/from [:data] :=> :identity}
