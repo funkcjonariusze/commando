@@ -1,44 +1,48 @@
 (ns commando.impl.registry
   "API for registry.
 
-   A registry is a map-based collection of command specifications that define how to
+   A registry is a vector-based collection of command specifications that define how to
    recognize, validate, and execute commands found in instruction map.
+   Vector order defines the command scan priority.
 
    Input (user-facing):
      (registry/build
-       {:commando/fn   cmds/command-fn-spec
-        :commando/from cmds/command-from-spec}
-       {:registry-order [:commando/from :commando/fn]})
+       [cmds/command-from-spec cmds/command-fn-spec])
 
    Output (built registry):
-     {:registry           {:commando/fn spec1, :commando/from spec2}
-      :registry-order     [:commando/from :commando/fn]
+     {:registry           [command-from-spec command-fn-spec]
       :registry-validated 1709654400000
       :registry-hash      12345}"
   (:require
    [commando.impl.command-map :as cm]))
 
 (defn- validate-registry
-  "Validates all specs in the registry map.
+  "Validates all specs in the registry vector.
    Returns {:valid? true} or {:valid? false :errors [...]}"
-  [specs-map]
-  (let [empty-errors (when (empty? specs-map)
+  [specs-vec]
+  (let [empty-errors (when (empty? specs-vec)
                        [{:type :empty-command-specs
                          :message "Registry is empty"}])
-        validation-errors (reduce-kv
-                            (fn [errors type spec]
+        validation-errors (reduce
+                            (fn [errors spec]
                               (if-let [error (:error (cm/validate-command-spec spec))]
                                 (conj errors {:type :invalid-spec
-                                              :command-map-spec/type type
+                                              :command-map-spec/type (:type spec)
                                               :message error})
-                                (if (not= type (:type spec))
-                                  (conj errors {:type :type-mismatch
-                                                :command-map-spec/type type
-                                                :message (str "Registry key " type " does not match spec :type " (:type spec))})
-                                  errors)))
+                                errors))
                             []
-                            specs-map)
-        all-errors (concat validation-errors empty-errors)]
+                            specs-vec)
+        type-freq (frequencies (map :type specs-vec))
+        dup-errors (reduce-kv
+                     (fn [errs t cnt]
+                       (if (> cnt 1)
+                         (conj errs {:type :duplicate-type
+                                     :command-map-spec/type t
+                                     :message (str "Duplicate type " t " in registry")})
+                         errs))
+                     []
+                     type-freq)
+        all-errors (concat validation-errors empty-errors dup-errors)]
     (if (empty? all-errors)
       {:valid? true}
       {:valid? false :errors (vec all-errors)})))
@@ -64,14 +68,6 @@
    default-command-map-spec
    default-command-value-spec])
 
-(defn- compute-registry-order
-  "Computes the scan order: ordered keys first, then remaining keys in arbitrary order."
-  [specs-map ordered-keys]
-  (let [spec-keys (set (keys specs-map))
-        valid-ordered (filterv spec-keys ordered-keys)
-        remaining (remove (set valid-ordered) (keys specs-map))]
-    (into valid-ordered remaining)))
-
 (defn built?
   "Returns true if the given value is a properly built registry map."
   [registry]
@@ -79,40 +75,33 @@
     (map? registry)
     (some? (:registry-validated registry))
     (some? (:registry-hash registry))
-    (contains? registry :registry)
-    (contains? registry :registry-order)))
+    (vector? (:registry registry))))
 
 (defn build
-  "Builds a command registry from a map of {type -> spec}.
+  "Builds a command registry from a vector of CommandMapSpecs.
 
    Args:
-     specs-map - A map of {:type spec, ...}
-     opts      - Optional map with :registry-order [...] for scan ordering
+     specs-vec - A vector of CommandMapSpec maps, each with at least :type
 
    Returns:
-     A validated registry map or throws an error"
-  ([specs-map] (build specs-map nil))
-  ([specs-map opts]
-   (let [validation (validate-registry specs-map)]
-     (if (:valid? validation)
-       (let [ordered-keys (compute-registry-order specs-map (:registry-order opts))]
-         {:registry           specs-map
-          :registry-order     ordered-keys
-          :registry-validated #?(:clj (System/currentTimeMillis)
-                                 :cljs (.now js/Date))
-          :registry-hash      (hash specs-map)})
-       (throw
-         (ex-info "Invalid registry specification"
-           {:errors (:errors validation)
-            :registry specs-map}))))))
+     A validated registry map with :registry vector, or throws an error"
+  [specs-vec]
+  (let [validation (validate-registry specs-vec)]
+    (if (:valid? validation)
+      {:registry           specs-vec
+       :registry-validated #?(:clj (System/currentTimeMillis)
+                              :cljs (.now js/Date))
+       :registry-hash      (hash specs-vec)}
+      (throw
+        (ex-info "Invalid registry specification"
+          {:errors (:errors validation)
+           :registry specs-vec})))))
 
 (defn enrich-runtime-registry [built-registry]
-  (let [registry        (:registry built-registry)
-        registry-order  (:registry-order built-registry)]
-    (assoc built-registry
-      :registry-runtime
-      (into (mapv registry registry-order)
-        internal-command-specs))))
+  (assoc built-registry
+    :registry-runtime
+    (into (vec (:registry built-registry))
+      internal-command-specs)))
 
 (defn reset-runtime-registry [enriched-registry]
   (dissoc enriched-registry :registry-runtime))
@@ -129,21 +118,21 @@
 ;; Registry Helpers
 ;; ----------------
 
-(defn registry-assoc
-  "Adds or replaces a spec in a built registry. Revalidates."
-  [built-registry command-map-spec-type command-map-spec]
-  (let [new-specs (assoc (:registry built-registry) command-map-spec-type command-map-spec)
-        old-order (:registry-order built-registry)
-        new-order (if (some #(= % command-map-spec-type) old-order)
-                    old-order
-                    (conj old-order command-map-spec-type))]
-    (build new-specs {:registry-order new-order})))
+(defn registry-add
+  "Adds or replaces a spec in a built registry (identified by :type). Revalidates."
+  [built-registry command-map-spec]
+  (let [specs-vec (:registry built-registry)
+        spec-type (:type command-map-spec)
+        existing-idx (first (keep-indexed (fn [i s] (when (= (:type s) spec-type) i)) specs-vec))
+        new-vec (if existing-idx
+                  (assoc specs-vec existing-idx command-map-spec)
+                  (conj specs-vec command-map-spec))]
+    (build new-vec)))
 
-(defn registry-dissoc
-  "Removes a spec from a built registry. Revalidates."
+(defn registry-remove
+  "Removes a spec from a built registry by its :type. Revalidates."
   [built-registry command-map-spec-type]
-  (let [new-specs (dissoc (:registry built-registry) command-map-spec-type)
-        new-order (filterv #(not= % command-map-spec-type) (:registry-order built-registry))]
-    (build new-specs {:registry-order new-order})))
+  (let [new-vec (filterv #(not= (:type %) command-map-spec-type) (:registry built-registry))]
+    (build new-vec)))
 
 

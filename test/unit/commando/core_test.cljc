@@ -18,8 +18,8 @@
 
 (def registry
   (->
-    {:commando/from cmds-builtin/command-from-spec
-     :test/add-id test-add-id-command}
+    [cmds-builtin/command-from-spec
+     test-add-id-command]
     (commando-registry/build)
     (commando-registry/enrich-runtime-registry)))
 
@@ -441,7 +441,7 @@
           none-cmd (cm/->CommandMapPath [:standalone] none-command)
           test-status-map {:status :ok
                            :instruction {:standalone {:test/none :independent}}
-                           :registry {:test/none none-command}
+                           :registry (commando/registry-create [none-command])
                            :internal/cm-list [none-cmd]}
           result (#'commando/build-deps-tree test-status-map)
           deps (:internal/cm-dependency result)]
@@ -511,14 +511,14 @@
                          :needs-prepare {:commando/from [:m-orders :prepare]}}}
    :z-reports {:daily {:commando/from [:m-orders]}
                :weekly {:commando/from [:m-orders :finalize :needs-create]
-                        := :create}}
+                        :=> [:get :create]}}
    :a-analytics {:summary {:commando/from [:z-reports :weekly]}
                  :export {:commando/from [:a-analytics :summary]}}})
 
 (def mutation-timestamp-execution-map
   {:status :ok
    :instruction {"timestamp" {:commando/mutation :time/current-dd-mm-yyyy-hh-mm-ss}}
-   :registry (commando/registry-create {:commando/mutation cmds-builtin/command-mutation-spec})
+   :registry (commando/registry-create [cmds-builtin/command-mutation-spec])
    :internal/cm-running-order [(cm/->CommandMapPath ["timestamp"] cmds-builtin/command-mutation-spec)]})
 
 (def from-transformation-execution-map
@@ -526,15 +526,15 @@
    :instruction {"source" {:data 42
                            :extra "info"}
                  "transformed" {:commando/from ["source"]
-                                := :data}}
-   :registry (commando/registry-create {:commando/from cmds-builtin/command-from-spec})
+                                :=> [:get :data]}}
+   :registry (commando/registry-create [cmds-builtin/command-from-spec])
    :internal/cm-running-order [(cm/->CommandMapPath ["transformed"] cmds-builtin/command-from-spec)]})
 
 (def apply-transformation-execution-map
   {:status :ok
    :instruction {"processed" {:commando/apply [1 2 3 4 5]
-                              := #(apply + %)}}
-   :registry (commando/registry-create {:commando/apply cmds-builtin/command-apply-spec})
+                              :=> [:fn #(apply + %)]}}
+   :registry (commando/registry-create [cmds-builtin/command-apply-spec])
    :internal/cm-running-order [(cm/->CommandMapPath ["processed"] cmds-builtin/command-apply-spec)]})
 
 ;; ================================
@@ -549,34 +549,34 @@
 
 (def basic-success-map
   {:status :ok
-   :registry (commando/registry-create {:test/add-id test-add-id-command})
+   :registry (commando/registry-create [test-add-id-command])
    :internal/cm-running-order []})
 
 (def from-command
   {:status :ok
    :instruction {"source" 42
                  "ref" {:commando/from ["source"]}}
-   :registry (commando/registry-create {:commando/from cmds-builtin/command-from-spec})
+   :registry (commando/registry-create [cmds-builtin/command-from-spec])
    :internal/cm-running-order [(cm/->CommandMapPath ["ref"] cmds-builtin/command-from-spec)]})
 
 (def fn-command
   {:status :ok
    :instruction {"calc" {:commando/fn +
                          :args [1 2 3]}}
-   :registry (commando/registry-create {:commando/fn cmds-builtin/command-fn-spec})
+   :registry (commando/registry-create [cmds-builtin/command-fn-spec])
    :internal/cm-running-order [(cm/->CommandMapPath ["calc"] cmds-builtin/command-fn-spec)]})
 
 (def apply-command
   {:status :ok
    :instruction {"transform" {:commando/apply {"data" 10}
-                              := #(get % "data")}}
-   :registry (commando/registry-create {:commando/apply cmds-builtin/command-apply-spec})
+                              :=> [:fn #(get % "data")]}}
+   :registry (commando/registry-create [cmds-builtin/command-apply-spec])
    :internal/cm-running-order [(cm/->CommandMapPath ["transform"] cmds-builtin/command-apply-spec)]})
 
 (def add-id-command-execution
   {:status :ok
    :instruction {"cmd" {:test/add-id "some-value"}}
-   :registry (commando/registry-create {:test/add-id test-add-id-command})
+   :registry (commando/registry-create [test-add-id-command])
    :internal/cm-running-order [(cm/->CommandMapPath ["cmd"] test-add-id-command)]})
 
 (def dependency-scenarios
@@ -620,13 +620,13 @@
 (def timeout-command-execution-map
   {:status :ok
    :instruction {"cmd" {:fail true}}
-   :registry (commando/registry-create {:test/failing (:timeout-cmd failing-commands)})
+   :registry (commando/registry-create [(:timeout-cmd failing-commands)])
    :internal/cm-running-order [(cm/->CommandMapPath ["cmd"] (:timeout-cmd failing-commands))]})
 
 (def bad-command-execution-map
   {:status :ok
    :instruction {"bad" {:will-fail true}}
-   :registry (commando/registry-create {:test/bad (:bad-cmd failing-commands)})
+   :registry (commando/registry-create [(:bad-cmd failing-commands)])
    :internal/cm-running-order [(cm/->CommandMapPath ["bad"] (:bad-cmd failing-commands))]})
 
 (def midway-fail-execution-map
@@ -634,8 +634,8 @@
    :instruction {"good" {:test/add-id "works"}
                  "bad" {:will-fail true}
                  "never" {:test/add-id "should-not-execute"}}
-   :registry (commando/registry-create {:test/add-id test-add-id-command
-                                        :test/bad (:bad-cmd failing-commands)})
+   :registry (commando/registry-create [test-add-id-command
+                                        (:bad-cmd failing-commands)])
    :internal/cm-running-order [(cm/->CommandMapPath ["good"] test-add-id-command)
                                (cm/->CommandMapPath ["bad"] (:bad-cmd failing-commands))
                                (cm/->CommandMapPath ["never"] test-add-id-command)]})
@@ -649,13 +649,13 @@
 (def nil-handler-execution-map
   {:status :ok
    :instruction {"nil-handler" {:handle-nil nil}}
-   :registry (commando/registry-create {:test/nil-handler nil-handler-command})
+   :registry (commando/registry-create [nil-handler-command])
    :internal/cm-running-order [(cm/->CommandMapPath ["nil-handler"] nil-handler-command)]})
 
 (def deep-nested-execution-map
   {:status :ok
    :instruction {"level1" {"level2" {"level3" {"deep" {:test/add-id "deep-value"}}}}}
-   :registry (commando/registry-create {:test/add-id test-add-id-command})
+   :registry (commando/registry-create [test-add-id-command])
    :internal/cm-running-order [(cm/->CommandMapPath ["level1" "level2" "level3" "deep"] test-add-id-command)]})
 
 (def large-commands-execution-map
@@ -663,16 +663,16 @@
         instruction (into {} (map #(vector % {:test/add-id (str "value-" %)}) (range 20)))]
     {:status :ok
      :instruction instruction
-     :registry (commando/registry-create {:test/add-id test-add-id-command})
+     :registry (commando/registry-create [test-add-id-command])
      :internal/cm-running-order commands}))
 
 (def full-registry-all
-  {:commando/from cmds-builtin/command-from-spec
-   :commando/fn cmds-builtin/command-fn-spec
-   :commando/apply cmds-builtin/command-apply-spec
-   :commando/mutation cmds-builtin/command-mutation-spec
-   :commando/macro cmds-builtin/command-macro-spec
-   :test/add-id test-add-id-command})
+  [cmds-builtin/command-from-spec
+   cmds-builtin/command-fn-spec
+   cmds-builtin/command-apply-spec
+   cmds-builtin/command-mutation-spec
+   cmds-builtin/command-macro-spec
+   test-add-id-command])
 
 (def from-instruction
   {"a" 10
@@ -684,20 +684,20 @@
 
 (def apply-instruction
   {"transform" {:commando/apply [1 2 3]
-                := count}})
+                :=> [:fn count]}})
 
 (def mixed-instruction
   {"source" 100
    "doubled" {:commando/fn *
               :args [{:commando/from ["source"]} 2]}
    "processed" {:commando/apply {:commando/from ["doubled"]}
-                := str}
+                :=> [:fn str]}
    "metadata" {:test/add-id "info"}})
 
 (def transform-instruction
   {"data" {:nested {:value 42}}
    "extracted" {:commando/from ["data"]
-                := #(get-in % [:nested :value])}})
+                :=> [:get-in [:nested :value]]}})
 
 ;; Complex dependency scenario instructions
 (def linear-chain-instruction
@@ -724,9 +724,9 @@
              "child2" {:commando/from ["parent" "child1"]}}})
 
 ;; Error scenarios data and registries
-(def error-registry {:commando/from cmds-builtin/command-from-spec
-                     :test/add-id test-add-id-command
-                     :test/failing (:timeout-cmd failing-commands)})
+(def error-registry [cmds-builtin/command-from-spec
+                     test-add-id-command
+                     (:timeout-cmd failing-commands)])
 
 (def invalid-cmd
   {:type :test/invalid
@@ -793,7 +793,7 @@
    :dependencies {:mode :point
                   :point-key [:ARG]}})
 
-(def custom-registry {:OP custom-op-cmd :ARG custom-arg-cmd})
+(def custom-registry [custom-op-cmd custom-arg-cmd])
 
 ;; Helper-integration instructions
 (def value-ref-instruction
@@ -819,17 +819,17 @@
 ;; Instruction-command test instructions
 (def sum-collection-instruction
   {"0" {:commando/from ["=SUM"]
-        := (fn [e] (apply + e))}
+        :=> [:fn (fn [e] (apply + e))]}
    "1" 1
    "2" {:container {:commando/from ["1"]
-                    := inc}}
+                    :=> [:fn inc]}}
    "3" {:container {:commando/from ["2"]
-                    := :container}}
+                    :=> [:get :container]}}
    "=SUM" [{:commando/from ["1"]}
            {:commando/from ["2"]
-            := :container}
+            :=> [:get :container]}
            {:commando/from ["3"]
-            := :container}]})
+            :=> [:get :container]}]})
 
 (def unexisting-path-instruction
   {"1" 1
@@ -857,13 +857,13 @@
                     1]}})
 
 ;; Test data for execute-function-comprehensive-test
-(def registry-from-spec {:commando/from cmds-builtin/command-from-spec})
+(def registry-from-spec [cmds-builtin/command-from-spec])
 (def test-instruction
   {"source" 42
    "ref" {:commando/from ["source"]}})
 
-(def basic-from-registry {:commando/from cmds-builtin/command-from-spec
-                           :test/add-id test-add-id-command})
+(def basic-from-registry [cmds-builtin/command-from-spec
+                          test-add-id-command])
 (def nested-instruction {"level1" {"level2" {"cmd" {:test/add-id "deep"}}}})
 (def vector-instruction {"items" [{:test/add-id "first"} {:test/add-id "second"}]})
 (def mixed-keys-instruction
@@ -930,23 +930,23 @@
 
 (def base-instruction-compiler
   {"0" {:commando/from ["=SUM"]
-        := (fn [e] (apply + e))}
+        :=> [:fn (fn [e] (apply + e))]}
    "1" 1
    "2" {"container" {:commando/from ["1"]}}
    "3" {"container" {:commando/from ["2"]
-                     := "container"}}
+                     :=> [:get "container"]}}
    "=SUM" [{:commando/from ["1"]}
            {:commando/from ["2"]
-            := "container"}
+            :=> [:get "container"]}
            {:commando/from ["3"]
-            := "container"}]})
+            :=> [:get "container"]}]})
 
 (def toplevel-vector-instruction
   [{:value 10}
    {:commando/from [0 :value]
-    := inc}
+    :=> [:fn inc]}
    {:commando/from [1]
-    := (partial * 2)}])
+    :=> [:fn (partial * 2)]}])
 
 (deftest execute-test
   (testing "Status"
@@ -957,16 +957,16 @@
                                        "info" "text"})))
         "Instruction with no commands succeeds")
     (is (commando/ok? (commando/execute basic-from-registry mixed-keys-instruction)) "Mixed data types as keys succeed")
-    (is (commando/failed? (commando/execute {} empty-registry-instruction)))
+    (is (commando/failed? (commando/execute [] empty-registry-instruction)))
     (is (commando/failed? (commando/execute error-registry failing-case-instruction)))
-    (is (commando/failed? (commando/execute {:commando/from cmds-builtin/command-from-spec} invalid-ref-instruction)))
-    (is (not-empty (:errors (commando/execute {:commando/from cmds-builtin/command-from-spec} invalid-ref-instruction))))
-    (is (commando/failed? (commando/execute {:commando/from cmds-builtin/command-from-spec} circular-instruction))
+    (is (commando/failed? (commando/execute [cmds-builtin/command-from-spec] invalid-ref-instruction)))
+    (is (not-empty (:errors (commando/execute [cmds-builtin/command-from-spec] invalid-ref-instruction))))
+    (is (commando/failed? (commando/execute [cmds-builtin/command-from-spec] circular-instruction))
         "Circular dependencies")
-    (is (commando/failed? (commando/execute {:test/invalid invalid-cmd} invalid-validation-instruction)) "Invalid command validation")
-    (is (commando/failed? (commando/execute {:test/throwing throwing-cmd} throwing-recognition-instruction))
+    (is (commando/failed? (commando/execute [invalid-cmd] invalid-validation-instruction)) "Invalid command validation")
+    (is (commando/failed? (commando/execute [throwing-cmd] throwing-recognition-instruction))
         "Command recognition exception")
-    (let [result (commando/execute {:commando/from cmds-builtin/command-from-spec} unexisting-path-instruction)]
+    (let [result (commando/execute [cmds-builtin/command-from-spec] unexisting-path-instruction)]
       (is (commando/failed? result))
       (is (=
             (:errors result)
@@ -974,8 +974,11 @@
               "Commando. Point dependency failed: key ':commando/from' references non-existent path [\"UNEXISTING_PATH\"]",
               :path ["2" :container],
               :command {:commando/from ["UNEXISTING_PATH"]}}])))
-    (is (commando/failed? (commando/execute {:commando/apply cmds-builtin/command-apply-spec} {"plain" {:commando/apply [1 2 3]}}))
-        "Missing := parameter causes validation failure"))
+    (is (commando/ok? (commando/execute [cmds-builtin/command-apply-spec] {"plain" {:commando/apply [1 2 3]}}))
+        "Missing :=> — identity pass-through via default :get-in driver")
+    (is (= [1 2 3]
+           (get-in (commando/execute [cmds-builtin/command-apply-spec] {"plain" {:commando/apply [1 2 3]}}) [:instruction "plain"]))
+        "Without :=>, :commando/apply returns its value as-is"))
   (testing "Basic cases"
     (is (= 42 (get-in (commando/execute registry-from-spec test-instruction) [:instruction "ref"]))
         "Command executed correctly")
@@ -1014,7 +1017,7 @@
                            [:instruction 0 1 2 3 4 5 6 7 8 9 "cmd"])
                    :id)
         "Deep nested command executes")
-    (is (= {"cmd" {:test/add-id "value"}} (:instruction (commando/execute {} empty-registry-instruction)))
+    (is (= {"cmd" {:test/add-id "value"}} (:instruction (commando/execute [] empty-registry-instruction)))
         "empty registry preserves instruction")
     (is (= 200
            (count (filter #(contains? % :id)
@@ -1027,7 +1030,7 @@
                             :id)
                 (range 100)))
     (is (= 5
-           (get-in (commando/execute {:commando/from cmds-builtin/command-from-spec} sum-collection-instruction) [:instruction "0"])))
+           (get-in (commando/execute [cmds-builtin/command-from-spec] sum-collection-instruction) [:instruction "0"])))
     (is (= {"A" 5
             "B" 10
             "result-multiply-1" 20
@@ -1041,70 +1044,70 @@
     (is (= {"0" {:final "5"}}
            (->> {"0" {:commando/apply {"1" {:commando/apply {"2" {:commando/apply {"3" {:commando/apply {"4" {:final
                                                                                                               "5"}}
-                                                                                        := #(get % "4")}}
-                                                                  := #(get % "3")}}
-                                            := #(get % "2")}}
-                      := #(get % "1")}}
-                (commando/execute {:commando/apply cmds-builtin/command-apply-spec})
+                                                                                        :=> [:get "4"]}}
+                                                                  :=> [:get "3"]}}
+                                            :=> [:get "2"]}}
+                      :=> [:get "1"]}}
+                (commando/execute [cmds-builtin/command-apply-spec])
                 :instruction))
         "Commands inside commands are executed correctly")
     (is (= "john"
-           (get-in (:instruction (commando/execute {:commando/from cmds-builtin/command-from-spec}
+           (get-in (:instruction (commando/execute [cmds-builtin/command-from-spec]
                                                    {"source" {:user-name "john"
                                                               :age 25}
                                                     "name" {:commando/from ["source"]
-                                                            := :user-name}}))
+                                                            :=> [:get :user-name]}}))
                    ["name"]))
-        "Value extracted correctly with := in commando/from using keyword")
+        "Value extracted with :=> [:get] in commando/from using keyword")
     (is (= 25
-           (get-in (:instruction (commando/execute {:commando/from cmds-builtin/command-from-spec}
+           (get-in (:instruction (commando/execute [cmds-builtin/command-from-spec]
                                                    {"source" {"age" 25}
                                                     "age" {:commando/from ["source"]
-                                                           := "age"}}))
+                                                           :=> [:get "age"]}}))
                    ["age"]))
-        "Value extracted correctly with := in commando/from using string")
+        "Value extracted with :=> [:get] in commando/from using string")
     (is (= 15
-           (get-in (:instruction (commando/execute {:commando/from cmds-builtin/command-from-spec}
+           (get-in (:instruction (commando/execute [cmds-builtin/command-from-spec]
                                                    {"numbers" [1 2 3 4 5]
                                                     "sum" {:commando/from ["numbers"]
-                                                           := #(reduce + %)}}))
+                                                           :=> [:fn #(reduce + %)]}}))
                    ["sum"]))
-        "commando/from  := syntax applying function works")
+        "commando/from :=> [:fn] applying function works")
     (is (= 1
-           (get-in (:instruction (commando/execute {:commando/from cmds-builtin/command-from-spec}
+           (get-in (:instruction (commando/execute [cmds-builtin/command-from-spec]
                                                    {"numbers" [1 2 3 4 5]
                                                     "first" {:commando/from ["numbers"]
-                                                             := first}}))
+                                                             :=> [:fn first]}}))
                    ["first"]))
-        "commando/from  := syntax applying function works")
-    (is (nil? (get-in (:instruction (commando/execute {:commando/from cmds-builtin/command-from-spec}
+        "commando/from :=> [:fn] applying function works")
+    (is (nil? (get-in (:instruction (commando/execute [cmds-builtin/command-from-spec]
                                                       {"source" {:a 1
                                                                  :b 2}
                                                        "missing" {:commando/from ["source"]
-                                                                  := :nonexistent}}))
+                                                                  :=> [:get :nonexistent]}}))
                       ["missing"]))
-        "commando/from := nil returned when value is missing")
-    (is (nil? (get-in (:instruction (commando/execute {:commando/from cmds-builtin/command-from-spec}
+        "commando/from :=> [:get] nil returned when key is missing")
+    (is (nil? (get-in (:instruction (commando/execute [cmds-builtin/command-from-spec]
                                                       {"source" {:a 1
                                                                  :b 2}
                                                        "missing" {:commando/from ["source"]
-                                                                  := "bóg"}}))
+                                                                  :=> [:get "bóg"]}}))
                       ["missing"]))
-        "commando/from := nil returned when value is missing")
+        "commando/from :=> [:get] nil returned when key is missing")
     (is (= '(20 40 60)
-           (get-in (:instruction (commando/execute {:commando/apply cmds-builtin/command-apply-spec
-                                                    :commando/from cmds-builtin/command-from-spec}
+           (get-in (:instruction (commando/execute [cmds-builtin/command-apply-spec
+                                                    cmds-builtin/command-from-spec]
                                                    {"base" [10 20 30]
                                                     "doubled" {:commando/apply {:commando/from ["base"]}
-                                                               := #(map (partial * 2) %)}}))
+                                                               :=> [:fn #(map (partial * 2) %)]}}))
                    ["doubled"]))
-        "commando/apply works with just a command as a value")
+        "commando/apply works with :=> [:fn] driver")
     (testing "Single command types"
-      (is (= 10 (get-in (commando/execute {:commando/from cmds-builtin/command-from-spec} from-instruction) [:instruction "b"])))
-      (is (= 6 (get-in (commando/execute {:commando/fn cmds-builtin/command-fn-spec} fn-instruction) [:instruction "calc"])))
+      (is (= 10 (get-in (commando/execute [cmds-builtin/command-from-spec] from-instruction) [:instruction "b"])))
+      (is (= 6 (get-in (commando/execute [cmds-builtin/command-fn-spec] fn-instruction) [:instruction "calc"])))
       (is
-       (= 3 (get-in (commando/execute {:commando/apply cmds-builtin/command-apply-spec} apply-instruction) [:instruction "transform"])))
-      (is (contains? (get-in (commando/execute {:test/add-id test-add-id-command} add-id-test-instruction) [:instruction "cmd"])
+       (= 3 (get-in (commando/execute [cmds-builtin/command-apply-spec] apply-instruction) [:instruction "transform"])))
+      (is (contains? (get-in (commando/execute [test-add-id-command] add-id-test-instruction) [:instruction "cmd"])
                      :id)))
     (testing "Mixed command types in single instruction"
       (is (= 100 (get-in (commando/execute full-registry-all mixed-instruction) [:instruction "source"])))
@@ -1140,27 +1143,27 @@
                              [:instruction "parent" "child2"])
                      :id)))
     (testing ":point dependency lookup in set/list cause a failure"
-      (is (and (commando/ok? (commando/execute {:commando/from cmds-builtin/command-from-spec} structure-map-instruction))
+      (is (and (commando/ok? (commando/execute [cmds-builtin/command-from-spec] structure-map-instruction))
                (= 1
-                  (get-in (commando/execute {:commando/from cmds-builtin/command-from-spec} structure-map-instruction)
+                  (get-in (commando/execute [cmds-builtin/command-from-spec] structure-map-instruction)
                           [:instruction "="]))))
-      (is (and (commando/ok? (commando/execute {:commando/from cmds-builtin/command-from-spec} structure-vector-instruction))
+      (is (and (commando/ok? (commando/execute [cmds-builtin/command-from-spec] structure-vector-instruction))
                (= 1
-                  (get-in (commando/execute {:commando/from cmds-builtin/command-from-spec} structure-vector-instruction)
+                  (get-in (commando/execute [cmds-builtin/command-from-spec] structure-vector-instruction)
                           [:instruction "="]))))
-      (is (commando/failed? (commando/execute {:commando/from cmds-builtin/command-from-spec} structure-set-instruction)))
-      (is (commando/failed? (commando/execute {:commando/from cmds-builtin/command-from-spec} structure-list-instruction))))
+      (is (commando/failed? (commando/execute [cmds-builtin/command-from-spec] structure-set-instruction)))
+      (is (commando/failed? (commando/execute [cmds-builtin/command-from-spec] structure-list-instruction))))
     (testing "Navigation with relative path ../"
       (is (= 1
-             (get-in (:instruction (commando/execute {:commando/from cmds-builtin/command-from-spec} relative-path-instruction))
+             (get-in (:instruction (commando/execute [cmds-builtin/command-from-spec] relative-path-instruction))
                      ["2" "container"]))
           "Parent path resolves to correct value")
       (is (= {"container" 1}
-             (get-in (:instruction (commando/execute {:commando/from cmds-builtin/command-from-spec} relative-path-instruction))
+             (get-in (:instruction (commando/execute [cmds-builtin/command-from-spec] relative-path-instruction))
                      ["3" "container"]))
           "Nested parent path with transformation works"))
     (testing "Top-level Vector Instruction"
-      (let [result (commando/execute {:commando/from cmds-builtin/command-from-spec} toplevel-vector-instruction)]
+      (let [result (commando/execute [cmds-builtin/command-from-spec] toplevel-vector-instruction)]
         (is (commando/ok? result) "This type of instruction is also acceptable")
         (is (= [{:value 10} 11 22] (:instruction result))
             "Result of toplevel-vector instruction not match with example")))

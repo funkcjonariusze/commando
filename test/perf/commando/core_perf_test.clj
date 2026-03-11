@@ -101,25 +101,25 @@
          {:sales-totals {:commando/from [:calculations :employee-sales-totals]}
           :employees {:commando/from [:employees]}
           :rates {:commando/from [:config :commission-rates]}}
-         := (fn [{:keys [sales-totals employees rates]}]
+         :=> [:fn (fn [{:keys [sales-totals employees rates]}]
               (into {}
                 (map (fn [[emp-id total-sales]]
                        (let [employee (get employees emp-id)
                              rate-key (:level employee)
                              commission-rate (get rates rate-key 0)]
                          [emp-id (* total-sales commission-rate)]))
-                  sales-totals)))}
+                  sales-totals)))]}
 
         :employee-bonuses
         {:commando/apply
          {:sales-totals {:commando/from [:calculations :employee-sales-totals]}
           :threshold {:commando/from [:config :bonus-threshold]}
           :bonus-amount {:commando/from [:config :performance-bonus]}}
-         := (fn [{:keys [sales-totals threshold bonus-amount]}]
+         :=> [:fn (fn [{:keys [sales-totals threshold bonus-amount]}]
               (into {}
                 (map (fn [[emp-id total-sales]]
                        [emp-id (if (> total-sales threshold) bonus-amount 0)])
-                  sales-totals)))}
+                  sales-totals)))]}
 
         :employee-total-compensation
         {:commando/fn (fn [commissions bonuses]
@@ -133,7 +133,7 @@
           :sales-totals {:commando/from [:calculations :employee-sales-totals]}
           :compensations {:commando/from [:calculations :employee-total-compensation]}
           :op-costs {:commando/from [:config :department-op-cost]}}
-         := (fn [{:keys [employees sales-totals compensations op-costs]}]
+         :=> [:fn (fn [{:keys [employees sales-totals compensations op-costs]}]
               (let [initial-agg {:sales {:total-revenue 0 :total-compensation 0}
                                  :marketing {:total-revenue 0 :total-compensation 0}
                                  :engineering {:total-revenue 0 :total-compensation 0}}]
@@ -154,7 +154,7 @@
                           :operating-cost op-cost
                           :net-profit profit)))
                     data
-                    op-costs))))}}
+                    op-costs))))]}}
 
        :final-report
        {:commando/apply
@@ -162,7 +162,7 @@
          :total-sales-per-employee {:commando/from [:calculations :employee-sales-totals]}
          :total-compensation-per-employee {:commando/from [:calculations :employee-total-compensation]}
          :tax-rate {:commando/from [:config :tax-rate]}}
-        := (fn [{:keys [dept-financials total-sales-per-employee total-compensation-per-employee tax-rate]}]
+        :=> [:fn (fn [{:keys [dept-financials total-sales-per-employee total-compensation-per-employee tax-rate]}]
              (let [company-total-revenue (reduce + (map :total-revenue (vals dept-financials)))
                    company-total-compensation (reduce + (map :total-compensation (vals dept-financials)))
                    company-total-op-cost (reduce + (map :operating-cost (vals dept-financials)))
@@ -180,7 +180,7 @@
                 :department-breakdown dept-financials
                 :employee-performance
                 {:top-earner (key (apply max-key val total-compensation-per-employee))
-                 :top-seller (key (apply max-key val total-sales-per-employee))}}))}})))
+                 :top-seller (key (apply max-key val total-sales-per-employee))}}))]}}))
 
 
 ;; ==============================

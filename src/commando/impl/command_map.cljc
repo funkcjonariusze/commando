@@ -84,8 +84,7 @@
   (malli/schema [:map
                  [:type :keyword]
                  [:recognize-fn fn?]
-                 [:validate-params-fn {:optional true}
-                  fn?]
+                 [:validate-params-fn {:optional true} fn?]
                  [:apply fn?]
                  [:dependencies
                   [:merge

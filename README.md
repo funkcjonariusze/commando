@@ -15,17 +15,21 @@
 - [Concept](#concept)
 - [Basics](#basics)
   - [Builtin Functionality](#builtin-functionality)
-	- [command-from-spec](#command-from-spec)
-	- [command-fn-spec](#command-fn-spec)
-	- [command-apply-spec](#command-apply-spec)
-	- [command-mutation-spec](#command-mutation-spec)
-	- [command-macro-spec](#command-macro-spec)
-  - [command-context-spec](#command-context-spec)
+    - [command-from-spec](#command-from-spec)
+    - [command-fn-spec](#command-fn-spec)
+    - [command-apply-spec](#command-apply-spec)
+    - [command-mutation-spec](#command-mutation-spec)
+    - [command-macro-spec](#command-macro-spec)
+    - [command-context-spec](#command-context-spec)
+  - [Drivers (Post-Processing)](#drivers-post-processing)
+    - [Built-in Drivers](#built-in-drivers)
+    - [Pipeline](#pipeline)
+    - [Custom Drivers](#custom-drivers)
   - [Adding New Commands](#adding-new-commands)
 - [Status-Map and Internals](#status-map-and-internals)
   - [Configuring Execution Behavior](#configuring-execution-behavior)
-	- [`:debug-result`](#debug-result)
-	- [`:error-data-string`](#error-data-string)
+    - [`:debug-result`](#debug-result)
+    - [`:error-data-string`](#error-data-string)
   - [Performance](#performance)
 - [Integrations](#integrations)
 - [Versioning](#versioning)
@@ -68,8 +72,8 @@ The main idea of Commando is to create your own flexible, data-driven DSL. Comma
 {"user-from-oracle-db" {:oracle/db :query-user :where [:= :session-id "SESSION-FSD123F1N1ASJ12UIVC"]}
  "inserting-info-about-user-in-mysql"
  {:mysql/db :add-some-user-action
-  :insert [{:action "open-app" :user {:commando/from ["user-from-oracle-db"] := :login}}
-		   {:action "query-insurense-data" :user {:commando/from ["user-from-oracle-db"] := :login}}
+  :insert [{:action "open-app" :user {:commando/from ["user-from-oracle-db"] :=> [:get :login]}}
+		   {:action "query-insurense-data" :user {:commando/from ["user-from-oracle-db"] :=> [:get :login]}}
 		   ...]}}
 ```
 
@@ -111,17 +115,17 @@ As Commando is simply a graph-based resolver with easy configuration, it is not 
   ;;   .---- Instruction
   ;;  V
   {"1" 1
-   ;;                        Command -----.
-   ;;                                     |
-   "2" {:commando/from ["1"] := inc} ;; <-'
-   "3" {:commando/from ["2"] := inc}})
+   ;;                                 Command -----.
+   ;;                                              |
+   "2" {:commando/from ["1"] :=> [:fn inc]} ;; <---'
+   "3" {:commando/from ["2"] :=> [:fn inc]}})
 ;; => {:instruction {"1" 1, "2" 2, "3" 3}}
 ```
 
 The above function composes "Instructions", "Commands", and a "CommandRegistry".
 - **Instruction**: a Clojure map, large or small, containing data and _commands_. The instruction describes the data structure and the transformations to apply.
-- **Command**: a data-lexeme that is evaluated and returns a result. The rules for parsing and executing commands are flexible and customizable. Command `:command/from` return value by the absolute or relative path, can optionally apply a function provided under the `:=` key.
-- **CommandRegistry**: a vector or map of CommandMapSpecs describing data-lexemes that should be treated as _commands_ by the library. When passed as a vector, the order defines the command scan priority. You can also pre-build a registry with `registry-create` and pass it directly.
+- **Command**: a data-lexeme that is evaluated and returns a result. The rules for parsing and executing commands are flexible and customizable. Command `:commando/from` returns a value by absolute or relative path, with optional post-processing via the `:=>` driver key.
+- **CommandRegistry**: a vector of CommandMapSpecs describing data-lexemes that should be treated as _commands_ by the library. The order defines the command scan priority. You can also pre-build a registry with `registry-create` and pass it directly. Use `registry-add` / `registry-remove` to modify a built registry.
 
 ### Builtin Functionality
 
@@ -129,7 +133,7 @@ The basic commands is found in namespace `commando.commands.builtin`. It describ
 
 #### command-from-spec
 
-Retrieves a value from the instruction by path. An optional `":="` key applies a function to the result.
+Retrieves a value from the instruction by path. Use the `:=>` driver key to post-process the result (see [Drivers](#drivers-post-processing)).
 
 **Absolute path** — list of keys from the instruction root:
 
@@ -194,7 +198,7 @@ A convenient wrapper over `apply`.
 
 #### command-apply-spec
 
-A wrapper similar to `commando/fn`, but conceptually closer to `commando/from`, operating on values already passed to the key.
+Returns the value of `:commando/apply` as-is. Use `:=>` driver to post-process the result.
 
 ```clojure
 (commando/execute
@@ -203,10 +207,10 @@ A wrapper similar to `commando/fn`, but conceptually closer to `commando/from`, 
 		{"1" {:commando/apply
 			  {"2" {:commando/apply
 					{"3" {:commando/apply {"4" {:final "5"}}
-						  := #(get % "4")}}
-					:= #(get % "3")}}
-			  := #(get % "2")}}
-		:= #(get % "1")}})
+						  :=> [:get "4"]}}
+					:=> [:get "3"]}}
+			  :=> [:get "2"]}}
+		:=> [:get "1"]}})
 ;; => {"0" {:final "5"}}
 ```
 
@@ -219,10 +223,10 @@ Imagine the following instruction is your initial database migration, adding use
   [commands-builtin/command-from-spec
    commands-builtin/command-mutation-spec]
   {"add-new-user-01" {:commando/mutation :add-user :name "Bob Anderson"
-					  :permissions [{:commando/from ["perm_send_mail"] := :id}
-					  {:commando/from ["perm_recv_mail"] := :id }]}
+					  :permissions [{:commando/from ["perm_send_mail"] :=> [:get :id]}
+					  {:commando/from ["perm_recv_mail"] :=> [:get :id]}]}
    "add-new-user-02" {:commando/mutation :add-user :name "Damian Nowak"
-					  :permissions [{:commando/from ["perm_recv_mail"] := :id}]}
+					  :permissions [{:commando/from ["perm_recv_mail"] :=> [:get :id]}]}
    "perm_recv_mail" {:commando/mutation :add-permission
 					 :name "receive-email-notification"}
    "perm_send_mail" {:commando/mutation :add-permission
@@ -259,7 +263,7 @@ Asume we have a Instruction what calculates mean.
   [commands-builtin/command-from-spec
    commands-builtin/command-apply-spec
    commands-builtin/command-fn-spec]
-  {:= :result
+  {:=> [:get :result]
    :commando/apply
    {:vector-of-numbers [1, 2, 3, 4, 5]
 	:result
@@ -276,7 +280,7 @@ Define a macro
 
 ```clojure
 (defmethod commands-builtin/command-macro :mean-calc [{vector-of-numbers :vector-of-numbers}]
-  {:= :result
+  {:=> [:get :result]
    :commando/apply
    {:vector-of-numbers vector-of-numbers
 	:result
@@ -323,7 +327,7 @@ Injects external reference data (dictionaries, config, feature flags) into instr
    commands-builtin/command-fn-spec]
   {:warrior     {:commando/context [:heroes "warrior"]}
    :fire-bonus  {:commando/context [:buffs :fire-sword]}
-   :hit-damage  {:commando/fn * :args [{:commando/from [:warrior] := :damage}
+   :hit-damage  {:commando/fn * :args [{:commando/from [:warrior] :=> [:get :damage]}
                                         {:commando/from [:fire-bonus]}]}
    :arena-name  {:commando/context [:arenas :default] :default "Colosseum"}})
 ;; => {:warrior {:hp 120 :damage 15}
@@ -332,7 +336,176 @@ Injects external reference data (dictionaries, config, feature flags) into instr
 ;;     :arena-name "Colosseum"}
 ```
 
-Missing path returns `nil`; use `:default` for an explicit fallback. The `:=` key applies a transform to the resolved value, same as in `:commando/from`. String-key form (`"commando-context"`, `"default"`, `"="`) is available for JSON compatibility.
+Missing path returns `nil`; use `:default` for an explicit fallback. Use `:=>` driver for post-processing the resolved value, same as in `:commando/from`. String-key form (`"commando-context"`, `"default"`, `"=>"`) is available for JSON compatibility.
+
+### Drivers (Post-Processing)
+
+Drivers provide a **data-driven** way to post-process command results. After a command's `:apply` function produces a raw result, the driver transforms it before the value is placed back into the instruction.
+
+A driver is declared via the `:=>` key (or `"=>"` for string-key/JSON maps) on any command, using a **vector DSL**:
+
+```clojure
+;; Vector form — [driver-name & params]
+{:commando/.. :=> [:get :name]}
+{:commando/.. :=> [:get-in [:address :city]]}
+{:commando/.. :=> [:select-keys [:name :email]]}
+{:commando/.. :=> [:fn inc]}
+;; Keyword form — driver with no params
+{:commando/.. :=> :my-custom-driver}
+;; Pipeline — first element is a vector, steps are chained left-to-right
+{:commando/.. :=> [[:get :address] [:get-in [:location :city]] :uppercase]}
+```
+
+If no `:=>` is specified, the default driver is `:get-in` with no params, which acts as identity (pass-through).
+
+```clojure
+(commando/execute
+ [commands-builtin/command-from-spec]
+ {:data {:name "John" :age 30 :email "john@example.com" :internal-id 999}
+  :subset {:commando/from [:data]
+           :=> [:select-keys [:name :email]]}})
+;; => {:data {...}, :subset {:name "John", :email "john@example.com"}}
+```
+
+#### Built-in Drivers
+
+**`:identity`** — pass-through behavior (enabled by default):
+
+```clojure
+{:commando/from [:data] :=> :identity}
+;; {:name "John" :age 30}  => {:name "John" :age 30}
+```
+
+**`:get`** — extract a single key from the result:
+
+```clojure
+{:commando/from [:data] :=> [:get :name]}
+;; {:name "John" :age 30}  =>  "John"
+```
+
+**`:get-in`** — extract a value at a deep path (also the default driver):
+
+```clojure
+{:commando/from [:data] :=> [:get-in [:address :location :city]]}
+;; {:address {:location {:city "Kyiv"}}}  =>  "Kyiv"
+```
+
+**`:select-keys`** — select a subset of keys:
+
+```clojure
+{:commando/from [:data] :=> [:select-keys [:name :email]]}
+;; {:name "John" :age 30 :email "j@e.com"}  =>  {:name "John" :email "j@e.com"}
+```
+
+**`:fn`** — apply an arbitrary function (for cases when you need runtime transforms):
+
+```clojure
+{:commando/from [:data] :=> [:fn inc]}
+{:commando/from [:data] :=> [:fn #(reduce + %)]}
+```
+
+**`:projection`** — rename and reshape fields (pure data, no function transforms):
+
+```clojure
+{:commando/from [:data]
+ :=> [:projection [[:user-id :id]
+                   [:user-name [:profile :full-name]]
+                   [:city [:address :location :city]]]]}
+;; Each field spec: [output-key]
+;;                   [output-key source-key-or-path]
+```
+
+Full projection example:
+
+```clojure
+(commando/execute
+  [commands-builtin/command-from-spec]
+  {:data {:id "u-101"
+          :profile {:full-name "John Doe"}
+          :address {:location {:city "kyiv"} :zip "01001"}
+          :metadata {:labels ["important" "urgent"]}}
+   :result {:commando/from [:data]
+            :=> [:projection [[:user-id :id]
+                              [:user-name [:profile :full-name]]
+                              [:city [:address :location :city]]
+                              [:tags [:metadata :labels]]]]}})
+;; => {:data {...}
+;;     :result {:user-id "u-101"
+;;              :user-name "John Doe"
+;;              :city "kyiv"
+;;              :tags ["important" "urgent"]}}
+```
+
+#### Pipeline
+
+When the first element of `:=>` is itself a vector, the entire value is treated as a **pipeline** — a sequence of driver steps chained left-to-right. Each step's output becomes the next step's input:
+
+```clojure
+(commando/execute
+  [commands-builtin/command-from-spec]
+  {:data {:profile {:name "john doe"} :age 30 :secret "x"}
+   ;; Step 1: get :profile → {:name "john doe"}
+   ;; Step 2: get :name    → "john doe"
+   ;; Step 3: uppercase    → "JOHN DOE"
+   :result {:commando/from [:data]
+            :=> [[:get :profile] [:get :name] :uppercase]}})
+;; => {:data {...}, :result "JOHN DOE"}
+```
+
+Each step in the pipeline can be:
+- A **vector** `[:driver-name & params]` — e.g. `[:get :name]`, `[:get-in [:a :b]]`, `[:fn inc]`
+- A **keyword** `:driver-name` — shorthand for a parameterless driver, e.g. `:uppercase`
+- A **string** `"driver-name"` — for JSON compatibility, keywordized at runtime
+
+Pipeline works with JSON string keys too:
+
+```clojure
+{"data" {"city" "kyiv"}
+ "result" {"commando-from" ["data"] "=>" [["get" "city"] "uppercase"]}}
+```
+
+#### Custom Drivers
+
+Drivers use Clojure's multimethod system. Define a new driver by extending `commando.impl.executing/command-driver`:
+
+```clojure
+(require '[commando.impl.executing :as commando-executing])
+
+(defmethod commando-executing/command-driver :uppercase
+  [_driver-name _driver-params applied-result _command-data _instruction _command-path-obj]
+  (if (string? applied-result)
+    (clojure.string/upper-case applied-result)
+    applied-result))
+
+;; Usage:
+{:commando/from [:data] :=> :uppercase}
+```
+
+The driver function receives six arguments:
+1. `driver-name` — keyword (dispatch value)
+2. `driver-params` — seq of parameters from the `:=>` vector (`nil` for keyword-only drivers)
+3. `applied-result` — the value returned by `:apply`
+4. `command-data` — the original command map before `:apply` ran
+5. `instruction` — the full instruction map
+6. `command-path-obj` — `CommandMapPath` object
+
+#### Drivers and JSON Compatibility
+
+All built-in driver declarations (except `:fn`) are plain data — keywords, strings, and vectors — making them fully serializable to JSON, EDN, or Transit:
+
+```clojure
+;; JSON-compatible instruction with drivers
+{"data" {"name" "John" "age" 30}
+ "name" {"commando-from" ["data"]
+         "=>" ["get" "name"]}}
+
+;; Pipeline in JSON
+{"data" {"address" {"city" "kyiv"}}
+ "result" {"commando-from" ["data"]
+           "=>" [["get-in" ["address" "city"]] "uppercase"]}}
+```
+
+String driver names are automatically keywordized at runtime.
 
 ### Adding new commands
 
@@ -344,11 +517,11 @@ Here's an example of another instruction, utilizing step-by-step extraction of k
 (commando/execute
   [commands-builtin/command-from-spec]
   {"1" {:values {:a 1 :b -1}}
-   "a-value" {:commando/from ["1" :values :a] := (partial * 100)}
-   "b-value" {:commando/from ["1" :values :b] := (partial * -100)}
+   "a-value" {:commando/from ["1" :values :a] :=> [:fn (partial * 100)]}
+   "b-value" {:commando/from ["1" :values :b] :=> [:fn (partial * -100)]}
    "args" {:a {:commando/from ["a-value"]}
 		   :b {:commando/from ["b-value"]}}
-   "summ=" {:commando/from ["args"] := (fn [{:keys [a b]}] (+ a b))}})
+   "summ=" {:commando/from ["args"] :=> [:fn (fn [{:keys [a b]}] (+ a b))]}})
 ;; =>
 ;; {"1" {:values {:a 1, :b -1}},
 ;;  "a-value" 100,
@@ -357,7 +530,7 @@ Here's an example of another instruction, utilizing step-by-step extraction of k
 ;;  "summ=" 200}
 ```
 
-The main challenge with the above instruction is that everything is processed via the optional `:=` key in the `:commando/from` command. This may be improved by introducing custom command types.
+The main challenge with the above instruction is that everything is processed via the `:=> [:fn ...]` driver. This may be improved by introducing custom command types.
 
 Let's create a new command using a CommandMapSpec configuration map:
 
@@ -385,7 +558,7 @@ Let's create a new command using a CommandMapSpec configuration map:
 Now you can use it for more expressive operations like "summ=" and "multiply=" as shown below:
 
 ```clojure
-;; Vector form — order defines scan priority
+;; Build a registry — vector order defines scan priority
 (def command-registry
   (commando/registry-create
 	[commands-builtin/command-from-spec
@@ -399,25 +572,22 @@ Now you can use it for more expressive operations like "summ=" and "multiply=" a
 				(apply (:CALC= m) (:ARGS m)))
 	  :dependencies {:mode :all-inside}}]))
 
-;; Map form — explicit type keys
-(def command-registry
-  (commando/registry-create
-	{:commando/from commands-builtin/command-from-spec
-	 :CALC=        {:type :CALC=
-	                :recognize-fn #(and (map? %) (contains? % :CALC=))
-	                :validate-params-fn (fn [m]
-	                                      (and
-	                                        (fn? (:CALC= m))
-	                                        (not-empty (:ARGS m))))
-	                :apply (fn [_instruction _command m]
-	                          (apply (:CALC= m) (:ARGS m)))
-	                :dependencies {:mode :all-inside}}}))
+;; Modify a built registry
+(def extended-registry
+  (commando/registry-add command-registry
+    {:type :NEW-CMD
+     :recognize-fn #(and (map? %) (contains? % :NEW-CMD))
+     :apply (fn [_ _ m] (:NEW-CMD m))
+     :dependencies {:mode :none}}))
+
+(def shrunk-registry
+  (commando/registry-remove extended-registry :NEW-CMD))
 
 (commando/execute
   command-registry
   {"1" {:values {:a 1 :b -1}}
-   "a-value" {:commando/from ["1" :values :a] := (partial * 100)}
-   "b-value" {:commando/from ["1" :values :b] := (partial * -100)}
+   "a-value" {:commando/from ["1" :values :a] :=> [:fn (partial * 100)]}
+   "b-value" {:commando/from ["1" :values :b] :=> [:fn (partial * -100)]}
    "summ=" {:CALC= +
 			:ARGS [{:commando/from ["a-value"]}
 				   {:commando/from ["b-value"]}
