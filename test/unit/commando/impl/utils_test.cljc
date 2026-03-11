@@ -202,4 +202,16 @@
        (is (= false (malli/validate sut/ResolvableFn 'UNKOWN/UNKOWN)))
        )))
 
+(deftest driver-spec-test
+  (testing "Testing driver specs for [:=>, \"=>\"] "
+    ;; Valid examples
+    (is (= false (malli/validate sut/malli:driver-spec nil)))
+    (is (= true  (malli/validate sut/malli:driver-spec :driver-name)))
+    (is (= true  (malli/validate sut/malli:driver-spec "driver-name")))
+    (is (= true  (malli/validate sut/malli:driver-spec [:driver-name {:driver "value"} 123])))
+    (is (= true  (malli/validate sut/malli:driver-spec ["driver-name"])))
+    (is (= true  (malli/validate sut/malli:driver-spec ["driver-name" "driver-value"])))
+    (is (= true  (malli/validate sut/malli:driver-spec [[:driver-1 {}] :driver-2 ["driver-3" "driver-3-value"]])))
+    (is (= true  (malli/validate sut/malli:driver-spec [:driver-name nil])))))
+
 

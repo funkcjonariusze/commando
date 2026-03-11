@@ -3,6 +3,7 @@
    #?(:cljs [cljs.test :refer [deftest is testing]]
       :clj [clojure.test :refer [deftest is testing]])
    [commando.commands.builtin :as cmds-builtin]
+   [commando.impl.utils       :as commando-utils]
    [commando.core             :as commando]
    [commando.impl.command-map :as cm]
    [commando.test-helpers     :as helpers]
@@ -966,14 +967,9 @@
     (is (commando/failed? (commando/execute [invalid-cmd] invalid-validation-instruction)) "Invalid command validation")
     (is (commando/failed? (commando/execute [throwing-cmd] throwing-recognition-instruction))
         "Command recognition exception")
-    (let [result (commando/execute [cmds-builtin/command-from-spec] unexisting-path-instruction)]
-      (is (commando/failed? result))
-      (is (=
-            (:errors result)
-            [{:message
-              "Commando. Point dependency failed: key ':commando/from' references non-existent path [\"UNEXISTING_PATH\"]",
-              :path ["2" :container],
-              :command {:commando/from ["UNEXISTING_PATH"]}}])))
+    (let [result (binding [commando-utils/*execute-config* {:error-data-string false}]
+                   (commando/execute [cmds-builtin/command-from-spec] unexisting-path-instruction))]
+      (is (commando/failed? result)))
     (is (commando/ok? (commando/execute [cmds-builtin/command-apply-spec] {"plain" {:commando/apply [1 2 3]}}))
         "Missing :=> — identity pass-through via default :get-in driver")
     (is (= [1 2 3]

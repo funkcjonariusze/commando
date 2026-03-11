@@ -217,29 +217,41 @@
   (testing "Failure test cases"
     (is
       (helpers/status-map-contains-error?
-        (commando/execute [command-builtin/command-from-spec]
-          {:ref {:commando/from ["@nonexistent" :value]}})
-        {:message "Commando. Point dependency failed: key ':commando/from' references non-existent path [\"@nonexistent\" :value]",
-         :path [:ref],
-         :command {:commando/from ["@nonexistent" :value]}})
+        (binding [commando-utils/*execute-config* {:error-data-string false}]
+          (commando/execute [command-builtin/command-from-spec]
+            {:ref {:commando/from ["@nonexistent" :value]}}))
+        (fn [error]
+          (=
+            (get-in error [:error :data])
+            {:message "Commando. Point dependency failed: key ':commando/from' references non-existent path [\"@nonexistent\" :value]"
+             :path [:ref],
+             :command {:commando/from ["@nonexistent" :value]}})))
       "Anchor not found: should produce error with :anchor key in data")
     (is
       (helpers/status-map-contains-error?
-        (commando/execute [command-builtin/command-from-spec]
-          {"source" {:a 1 :b 2}
-           "missing" {:commando/from ["UNEXISING"]}})
-        {:message "Commando. Point dependency failed: key ':commando/from' references non-existent path [\"UNEXISING\"]",
-         :path ["missing"],
-         :command {:commando/from ["UNEXISING"]}})
+        (binding [commando-utils/*execute-config* {:error-data-string false}]
+          (commando/execute [command-builtin/command-from-spec]
+            {"source" {:a 1 :b 2}
+             "missing" {:commando/from ["UNEXISING"]}}))
+        (fn [error]
+          (=
+            (get-in error [:error :data])
+            {:message "Commando. Point dependency failed: key ':commando/from' references non-existent path [\"UNEXISING\"]",
+             :path ["missing"],
+             :command {:commando/from ["UNEXISING"]}})))
       "Waiting on error, bacause commando/from seding to unexising path")
     (is
       (helpers/status-map-contains-error?
-        (commando/execute [command-builtin/command-from-spec]
-          {"source" {:a 1 :b 2}
-           "missing" {"commando-from" ["UNEXISING"]}})
-        {:message "Commando. Point dependency failed: key 'commando-from' references non-existent path [\"UNEXISING\"]",
-         :path ["missing"],
-         :command {"commando-from" ["UNEXISING"]}})
+        (binding [commando-utils/*execute-config* {:error-data-string false}]
+          (commando/execute [command-builtin/command-from-spec]
+            {"source" {:a 1 :b 2}
+             "missing" {"commando-from" ["UNEXISING"]}}))
+        (fn [error]
+          (=
+            (get-in error [:error :data])
+            {:message "Commando. Point dependency failed: key 'commando-from' references non-existent path [\"UNEXISING\"]",
+             :path ["missing"],
+             :command {"commando-from" ["UNEXISING"]}})))
       "Waiting on error, bacause \"commando-from\" seding to unexising path")
     (is
       (helpers/status-map-contains-error?
@@ -305,8 +317,8 @@
       (is (= {:val-default "fallback" :val-nil nil}
             (:instruction
              (commando/execute [ctx-spec]
-               {:val-default {:commando/context [:nonexistent] :default "fallback"}
-                :val-nil     {:commando/context [:nonexistent] :default nil}})))
+               {:val-default {:commando/context [:nonexistent] :=> [:default "fallback"]}
+                :val-nil     {:commando/context [:nonexistent] :=> [:default nil]}})))
         "Should return :default value when path not found, in other way 'nil' value without exception ")
 
       (let [str-ctx {"lang" {"ua" "Ukrainian" "en" "English"}}
@@ -316,7 +328,7 @@
                (commando/execute [str-spec]
                  {"val"          {"commando-context" ["lang" "ua"]}
                   "val-get"      {"commando-context" ["lang"] "=>" ["get" "en"]}
-                  "val-default"  {"commando-context" ["missing"] "default" "none"}})))
+                  "val-default"  {"commando-context" ["missing"] "=>" ["default" "none"]}})))
           "String keys test")))
     (testing "Failure test cases"
       (is (helpers/status-map-contains-error?

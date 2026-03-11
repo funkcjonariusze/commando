@@ -397,6 +397,13 @@ If no `:=>` is specified, the default driver is `:get-in` with no params, which 
 ;; {:name "John" :age 30 :email "j@e.com"}  =>  {:name "John" :email "j@e.com"}
 ```
 
+**`:default`** — if nil return default value
+
+```clojure
+{:commando/from [:age] :=> [:default 30]}
+;; {:name "John" :age nil}  => 30
+```
+
 **`:fn`** — apply an arbitrary function (for cases when you need runtime transforms):
 
 ```clojure
