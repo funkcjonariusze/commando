@@ -186,7 +186,67 @@
                    )
                "Uncorrect commando/from ':=' applicator. CLJS Supports: fn/keyword")))
   ;; -------------------
+  (testing "Anchor navigation"
+    (is (= {:section {:__anchor "root" :price 10 :ref 10}}
+           (:instruction
+            (commando/execute [command-builtin/command-from-spec]
+              {:section {:__anchor "root"
+                         :price 10
+                         :ref {:commando/from ["@root" :price]}}})))
+        "Basic anchor: command resolves to nearest ancestor with __anchor = 'root'")
+    (is (= {:items [{:__anchor "item" :price 10 :ref 10}
+                    {:__anchor "item" :price 20 :ref 20}]}
+           (:instruction
+            (commando/execute [command-builtin/command-from-spec]
+              {:items [{:__anchor "item"
+                        :price 10
+                        :ref {:commando/from ["@item" :price]}}
+                       {:__anchor "item"
+                        :price 20
+                        :ref {:commando/from ["@item" :price]}}]})))
+        "Duplicate anchors: each command finds its own nearest ancestor")
+    (is (= {:catalog {:__anchor "root"
+                      :base-price 5
+                      :section {:__anchor "section" :price 10 :sibling-price 5}}}
+           (:instruction
+            (commando/execute [command-builtin/command-from-spec]
+              {:catalog {:__anchor "root"
+                         :base-price 5
+                         :section {:__anchor "section"
+                                   :price 10
+                                   :sibling-price {:commando/from ["@section" "../" :base-price]}}}})))
+        "Anchor combined with ../: jump to anchor then go up one level")
+    (is (= {:root-1
+            {:__anchor "root-1"
+             :price 5
+             :root-2
+             {:__anchor "root-2"
+              :price 10
+              :root-3
+              {:price-1 5
+               :price-2 10}}}}
+          (:instruction
+           (commando/execute [command-builtin/command-from-spec]
+             {:root-1
+              {:__anchor "root-1"
+               :price 5
+               :root-2
+               {:__anchor "root-2"
+                :price 10
+                :root-3
+                {:price-1 {:commando/from ["@root-1" :price]}
+                 :price-2 {:commando/from ["@root-2" :price]}}}}})))
+      "Different level anchor combined in one level"))
+  ;; -------------------
   (testing "Failure test cases"
+    (is
+      (helpers/status-map-contains-error?
+        (commando/execute [command-builtin/command-from-spec]
+          {:ref {:commando/from ["@nonexistent" :value]}})
+        {:message "Commando. Point dependency failed: key ':commando/from' references non-existent path [\"@nonexistent\" :value]",
+         :path [:ref],
+         :command {:commando/from ["@nonexistent" :value]}})
+      "Anchor not found: should produce error with :anchor key in data")
     (is
       (helpers/status-map-contains-error?
         (commando/execute [command-builtin/command-from-spec]

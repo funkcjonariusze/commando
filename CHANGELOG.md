@@ -1,4 +1,13 @@
-# 1.0.5
+# 1.0.6
+
+ADDED `print-trace` in `commando.impl.utils` — replaces `print-deep-stats` with an improved flamegraph that also shows per-node instruction keys and optional title. Add `:__title` or `"__title"` to any instruction's top level to annotate that node in the output. `print-deep-stats` is kept as a deprecated alias.
+
+ADDED named anchor navigation for `:commando/from` paths. Declare an anchor with `"__anchor"` or `:__anchor` key in any instruction map, then reference it with `"@name"` as a path segment. The resolver walks up the tree and resolves to the nearest ancestor with that anchor name — independent of nesting depth. Anchors can be combined with existing `"../"` relative navigation in a single path.
+
+UPDATED `resolve-relative-path` in `commando.impl.dependency` to accept an optional leading `instruction` argument and handle `"@anchor"` segments.
+
+UPDATED `point-target-path` in `commando.impl.dependency` to pass the instruction into `resolve-relative-path`, enabling anchor resolution.
+
 ADDED new keys to `commando.impl.utils/*execute-config*`. Added hooks keys
  - `:hook-execute-start` if not nil, call procedure at the start of `commando.core/execute` function.
  - `:hook-execute-end` if not nil, call procedure at the end of `commando.core/execute` function.

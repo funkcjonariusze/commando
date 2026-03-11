@@ -301,7 +301,7 @@ See
 ;; Stats Tools
 ;; -----------
 
-;; print stats of execution
+;; -- print stats --
 
 (defn print-stats
   "Prints a formatted summary of the execution stats from a status-map.
@@ -351,87 +351,126 @@ See
                       "  " (if (= "execute" key-str) "=" (str (inc index)) )
                       "  " key-str " " padding formatted))))))))
 
-
-;; print stats for all internal executions
+;; -- print-trace --
 
 (defn ^:private flame-print-stats [stats indent]
   (let [max-key-len (apply max 0 (map (comp count name first) stats))]
     (doseq [[stat-key _ formatted] stats]
       (let [key-str (name stat-key)
             padding (str/join "" (repeat (- max-key-len (count key-str)) " "))]
-        (println (str indent
-                   "" key-str " " padding formatted))))))
+        (println (str indent key-str " " padding formatted))))))
+
+(defn ^:private flame-print-title [title indent]
+  (println (str indent "title: " title)))
+
+(defn ^:private flame-print-keys [instruction-keys indent]
+  (let [max-keys-per-line 5
+        ks (keep (fn [k]
+                   (when-not (contains? #{"__title" :__title} k) (str k)))
+             instruction-keys)
+        [first-line & rest-lines] (partition-all max-keys-per-line ks)]
+    (when first-line
+      (println (str indent "keys: " (str/join ", " first-line)))
+      (doseq [line rest-lines]
+        (println (str indent "      " (str/join ", " line)))))))
 
 (defn ^:private flame-print [data & [indent]]
   (let [indent (or indent "")]
     (doseq [[k v] data]
       (println (str indent "———" k))
+      (when (:instruction-title v)
+        (flame-print-title (:instruction-title v) (str indent "   |")))
+      (when (:instruction-keys v)
+        (flame-print-keys (:instruction-keys v) (str indent "   |")))
       (when (:stats v)
         (flame-print-stats (:stats v) (str indent "   |")))
-      (doseq [[child-k child-v] v
+      (doseq [[_child-k child-v] v
               :when (map? child-v)]
-        (when (not= child-k :stats)
-          (flame-print {child-k child-v} (str indent "   :")))))))
+        (flame-print {_child-k child-v} (str indent "   :"))))))
 
 (defn ^:private flamegraph [data]
   (println "Printing Flamegraph for executes:")
   (flame-print data))
 
-(defn print-deep-stats
-  "Function print the flamegraph of internals execution.
+(defn print-trace
+  "Wraps an execution function and prints a flamegraph of all nested
+  `commando/execute` calls with timing stats, instruction keys, and
+  optional titles.
 
-   Example
-     (defmethod commando.commands.builtin/command-mutation :rand-n
-       [_macro-type {:keys [v]}]
-       (:instruction
-        (commando.core/execute
-          [commando.commands.builtin/command-apply-spec]
-          {:commando/apply v
-           := (fn [n] (rand-int n))})))
+  Add `:__title` or `\"__title\"` to the top level of any instruction
+  to annotate that node in the flamegraph output.
 
-     (defmethod commando.commands.builtin/command-macro :sum-n
-       [_macro-type {:keys [v]}]
-       {:commando/fn (fn [& v-coll] (apply + v-coll))
-        :args [v
-               {:commando/mutation :rand-n
-                :v 200}]})
+  Takes a zero-argument function that calls `commando/execute` and
+  returns its result unchanged.
 
-     (print-deep-stats
-       #(commando.core/execute
-          [commando.commands.builtin/command-fn-spec
-           commando.commands.builtin/command-from-spec
-           commando.commands.builtin/command-macro-spec
-           commando.commands.builtin/command-mutation-spec]
-          {:value {:commando/mutation :rand-n :v 200}
-           :result {:commando/macro :sum-n
-                    :v {:commando/from [:value]}}}))
+  Example
+    (defmethod commando.commands.builtin/command-mutation :rand-n
+      [_macro-type {:keys [v]}]
+      (:instruction
+       (commando.core/execute
+         [commando.commands.builtin/command-apply-spec]
+         {:commando/apply v
+          := (fn [n] (rand-int n))})))
 
-     OUT=>
-       Printing Flamegraph for executes:
-       ———59f2f084-28f6-44fd-bf52-1e561187a2e5
-          |execute-commands! 1.123606ms
-          |execute           1.92817ms
-          :———e4e245ca-194a-43c6-9d7e-9225e0424c46
-          :   |execute-commands! 66.344µs
-          :   |execute           287.669µs
-          :———77de8840-c9d3-4baa-b0d6-8a9806ede29d
-          :   |execute-commands! 372.566µs
-          :   |execute           721.636µs
-          :   :———0aefeb8e-04b2-4e77-b526-6969c08f9bb5
-          :   :   |execute-commands! 39.221µs
-          :   :   |execute           264.591µs
+    (defmethod commando.commands.builtin/command-macro :sum-n
+      [_macro-type {:keys [v]}]
+      {:__title \"sum random\"
+       :commando/fn (fn [& v-coll] (apply + v-coll))
+       :args [v
+              {:commando/mutation :rand-n
+               :v 200}]})
+
+    (print-trace
+      #(commando.core/execute
+         [commando.commands.builtin/command-fn-spec
+          commando.commands.builtin/command-from-spec
+          commando.commands.builtin/command-macro-spec
+          commando.commands.builtin/command-mutation-spec]
+         {:value {:commando/mutation :rand-n :v 200}
+          :result {:commando/macro :sum-n
+                   :v {:commando/from [:value]}}}))
+
+    OUT=>
+      Printing Flamegraph for executes:
+      ———59f2f084-28f6-44fd-bf52-1e561187a2e5
+         |keys: :value, :result
+         |execute-commands! 1.123606ms
+         |execute           1.92817ms
+         :———e4e245ca-194a-43c6-9d7e-9225e0424c46
+         :   |execute-commands! 66.344µs
+         :   |execute           287.669µs
+         :———77de8840-c9d3-4baa-b0d6-8a9806ede29d
+         :   |title: sum random
+         :   |keys: :__title, :commando/fn, :args
+         :   |execute-commands! 372.566µs
+         :   |execute           721.636µs
+         :   :———0aefeb8e-04b2-4e77-b526-6969c08f9bb5
+         :   :   |execute-commands! 39.221µs
+         :   :   |execute           264.591µs
   "
   [execution-fn]
   (let [stats-state (atom {})
         result
         (binding [*execute-config*
-                  {;; :debug-result true
+                  {:error-data-string false
+                   :hook-execute-start
+                   (fn [e]
+                     (swap! stats-state
+                       (fn [s]
+                         (update-in s (:stack *execute-internals*)
+                           #(merge % {:instruction-title
+                                      (when (map? (:instruction e))
+                                        (or (get (:instruction e) "__title")
+                                            (get (:instruction e) :__title)))})))))
                    :hook-execute-end
                    (fn [e]
                      (swap! stats-state
                        (fn [s]
                          (update-in s (:stack *execute-internals*)
-                           #(merge % {:stats (:stats e)})))))}]
+                           #(merge % {:stats            (:stats e)
+                                      :instruction-keys (when (map? (:instruction e))
+                                                          (vec (keys (:instruction e))))})))))}]
           (execution-fn))]
     (flamegraph @stats-state)
     result))
+

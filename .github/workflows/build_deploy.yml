@@ -1,14 +1,11 @@
-name: Run tests
+name: Build & Deploy
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  workflow_dispatch
 
 jobs:
-  tests:
-    name: Run Tests
+  build-and-deploy:
+    name: Build and Deploy
     runs-on: ubuntu-latest
 
     steps:
@@ -27,11 +24,10 @@ jobs:
       uses: actions/cache@v4.2.4
       with:
         path: |
-            ~/.m2/repository
-            ~/.gitlibs
-            ~/.deps.clj
-            .cpcache
-          # List all files containing dependencies:
+          ~/.m2/repository
+          ~/.gitlibs
+          ~/.deps.clj
+          .cpcache
         key: cljdeps-${{ hashFiles('deps.edn') }}
         restore-keys: cljdeps-
 
@@ -41,3 +37,11 @@ jobs:
     - name: Run CLJS tests
       run: clojure -M:cljs-test
 
+    - name: Build JAR
+      run: clojure -M:build jar
+
+    - name: Deploy to Clojars
+      run: clojure -X:deploy
+      env:
+        CLOJARS_USERNAME: ${{ secrets.CLOJARS_USERNAME }}
+        CLOJARS_PASSWORD: ${{ secrets.CLOJARS_PASSWORD }}

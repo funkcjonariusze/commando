@@ -1,5 +1,6 @@
 (ns commando.impl.dependency
   (:require
+   [clojure.string            :as str]
    [commando.impl.command-map :as cm]
    [commando.impl.utils       :as utils]))
 
@@ -60,23 +61,59 @@
          (remove #(= % command-path-obj))
          set)))
 
+(defn- find-anchor-path
+  "Walks UP from current-path looking for the nearest ancestor map
+   that has key \"__anchor\" or :__anchor equal to anchor-name.
+   Returns the path vector to that ancestor, or nil if not found."
+  [instruction current-path anchor-name]
+  (loop [path (vec current-path)]
+    (let [node (get-in instruction path)]
+      (if (and (map? node)
+               (= anchor-name (or (get node "__anchor")
+                                  (get node :__anchor))))
+        path
+        (when (seq path)
+          (recur (pop path)))))))
+
 (defn resolve-relative-path
-  "Resolves path segments with relative navigation (../ and ./) against a base path."
-  [base-path segments]
-  (let [{:keys [relative path]} (reduce (fn [acc segment]
-                                          (let [{:keys [relative path]} acc]
-                                            (cond
-                                              (= segment "../") {:relative
-                                                                 (if relative (butlast relative) (butlast base-path))
-                                                                 :path path}
-                                              (= segment "./") {:relative (if relative relative base-path)
-                                                                :path path}
-                                              :else {:relative relative
-                                                     :path (conj path segment)})))
-                                  {:relative nil
-                                   :path []}
-                                  segments)]
-    (if relative (concat relative path) path)))
+  "Resolves path segments with relative navigation against a base path.
+  Returns nil if an @anchor segment cannot be resolved.
+
+  Supported segment types:
+    \"../\"        - go up one level from current position
+    \"./\"         - stay at current level (noop for relative base)
+    \"@anchor\"    - jump to nearest ancestor with matching __anchor name
+                    (requires instruction to be passed as first argument)
+    any other      - descend into that key"
+  [instruction base-path segments]
+  (let [result
+        (reduce
+          (fn [acc segment]
+            (let [{:keys [relative path]} acc
+                  current-base (or relative base-path)]
+              (cond
+                (= segment "../")
+                {:relative (vec (butlast current-base)) :path path}
+
+                (= segment "./")
+                {:relative (vec current-base) :path path}
+
+                (and instruction
+                  (string? segment)
+                  (str/starts-with? segment "@"))
+                (let [anchor-name (subs segment 1)
+                      anchor-path (find-anchor-path instruction (butlast current-base) anchor-name)]
+                  (if anchor-path
+                    {:relative anchor-path :path path}
+                    (reduced nil)))
+
+                :else
+                {:relative relative :path (conj path segment)})))
+          {:relative nil :path []}
+          segments)]
+    (when result
+      (let [{:keys [relative path]} result]
+        (if relative (vec (concat relative path)) (vec path))))))
 
 (defn path-exists-in-instruction?
   "Checks if a path exists in the instruction map."
@@ -113,9 +150,8 @@
                                  (reduced pointed-path)))
                        nil
                        point-key-seq)]
-    (->> pointed-path
-      (resolve-relative-path command-path)
-      vec)))
+    (or (resolve-relative-path instruction command-path pointed-path)
+        (throw-point-error command-path-obj pointed-path instruction))))
 
 (defmethod find-command-dependencies :point
   [command-path-obj instruction path-trie _type]
@@ -159,3 +195,4 @@
                   (find-command-dependencies command-path-obj instruction path-trie dependency-mode))))
             {}
             cm-list)))
+

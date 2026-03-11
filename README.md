@@ -4,7 +4,7 @@
 
 [![Clojars Project](https://img.shields.io/clojars/v/org.clojars.funkcjonariusze/commando.svg)](https://clojars.org/org.clojars.funkcjonariusze/commando)
 [![Run tests](https://github.com/funkcjonariusze/commando/actions/workflows/unit_test.yml/badge.svg)](https://github.com/funkcjonariusze/commando/actions/workflows/unit_test.yml)
-[![cljdoc badge](https://cljdoc.org/badge/org.clojars.funkcjonariusze/commando)](https://cljdoc.org/d/org.clojars.funkcjonariusze/commando/1.0.5)
+[![cljdoc badge](https://cljdoc.org/badge/org.clojars.funkcjonariusze/commando)](https://cljdoc.org/d/org.clojars.funkcjonariusze/commando/1.0.6)
 
 **Commando** is a flexible Clojure library for managing, extracting, and transforming data inside nested map structures aimed to build your own Data DSL.
 
@@ -34,10 +34,10 @@
 
 ```clojure
 ;; deps.edn with git
-{org.clojars.funkcjonariusze/commando {:mvn/version "1.0.5"}}
+{org.clojars.funkcjonariusze/commando {:mvn/version "1.0.6"}}
 
 ;; leiningen
-[org.clojars.funkcjonariusze/commando "1.0.5"]
+[org.clojars.funkcjonariusze/commando "1.0.6"]
 ```
 
 ## Quick Start
@@ -128,24 +128,44 @@ The basic commands is found in namespace `commando.commands.builtin`. It describ
 
 #### command-from-spec
 
-Allows retrieving data from the instruction by referencing it via the `:commando/from` key. An optional function can be applied via the `:=` key.
+Retrieves a value from the instruction by path. An optional `":="` key applies a function to the result.
 
-The `:commando/from` command supports relative paths like `"../"`, `"./"` for accessing data. The example below shows how values "1", "2", and "3" can be incremented and decremented in separate map namespaces:
+**Absolute path** — list of keys from the instruction root:
 
 ```clojure
 (commando/execute
   [commands-builtin/command-from-spec]
-  {"incrementing 1"
-   {"1" 1
-	"2" {:commando/from ["../" "1"] := inc}
-	"3" {:commando/from ["../" "2"] := inc}}
-   "decrementing 1"
-   {"1" 1
-	"2" {:commando/from ["../" "1"] := dec}
-	"3" {:commando/from ["../" "2"] := dec}}})
-;; =>
-;;  {"incrementing 1" {"1" 1, "2" 2, "3" 3},
-;;   "decrementing 1" {"1" 1, "2" 0, "3" -1}}
+  {:catalog {:price 99}
+   :ref      {:commando/from [:catalog :price]}})
+;; => {:catalog {:price 99}, :ref 99}
+```
+
+**Relative path** — `"../"` goes up one level from the command's position, `"./"` stays at the current level:
+
+```clojure
+(commando/execute
+  [commands-builtin/command-from-spec]
+  {"section-a" {"price" 10 "ref" {"commando-from" ["../" "price"]}}
+   "section-b" {"price" 20 "ref" {"commando-from" ["../" "price"]}}})
+;; => {"section-a" {"price" 10, "ref" 10}
+;;     "section-b" {"price" 20, "ref" 20}}
+```
+
+**Named anchors** — mark any map with `"__anchor"` or `:__anchor`, then jump to it with `"@name"` regardless of nesting depth. The resolver finds the nearest ancestor with that name, so duplicate anchor names are safe — each command resolves to its own closest one:
+
+```clojure
+(commando/execute
+  [commands-builtin/command-from-spec]
+  {:items [{:__anchor "item" :price 10 :total {:commando/from ["@item" :price]}}
+           {:__anchor "item" :price 20 :total {:commando/from ["@item" :price]}}]})
+;; => {:items [{:__anchor "item", :price 10, :total 10}
+;;             {:__anchor "item", :price 20, :total 20}]}
+```
+
+Anchors and `"../"` can be combined in one path — after jumping to the anchor, navigation continues from there:
+
+```clojure
+{:commando/from ["@section" "../" :base-price]}
 ```
 
 #### command-fn-spec
