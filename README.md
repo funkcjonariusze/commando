@@ -852,7 +852,7 @@ To provide deeper insight, we've broken down the execution into five distinct st
 
 The following graphs show the performance of each step under both normal and extreme load conditions.
 
-**Normal Workloads (up to 80,000 dependencies)**
+**Normal Workloads (100-200 dependecies)**
 
 Under normal conditions, each execution step completes in just a few milliseconds. The overhead of parsing, dependency resolution, and execution is minimal, ensuring a fast and responsive system.
 
