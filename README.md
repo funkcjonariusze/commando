@@ -125,7 +125,7 @@ As Commando is simply a graph-based resolver with easy configuration, it is not 
 The above function composes "Instructions", "Commands", and a "CommandRegistry".
 - **Instruction**: a Clojure map, large or small, containing data and _commands_. The instruction describes the data structure and the transformations to apply.
 - **Command**: a data-lexeme that is evaluated and returns a result. The rules for parsing and executing commands are flexible and customizable. Command `:commando/from` returns a value by absolute or relative path, with optional post-processing via the `:=>` driver key.
-- **CommandRegistry**: a vector or map of CommandMapSpecs describing data-lexemes that should be treated as _commands_ by the library. When passed as a vector, the order defines the command scan priority. You can also pre-build a registry with `registry-create` and pass it directly.
+- **CommandRegistry**: a vector of CommandMapSpecs describing data-lexemes that should be treated as _commands_ by the library. The order defines the command scan priority. You can also pre-build a registry with `registry-create` and pass it directly. Use `registry-add` / `registry-remove` to modify a built registry.
 
 ### Builtin Functionality
 
@@ -558,7 +558,7 @@ Let's create a new command using a CommandMapSpec configuration map:
 Now you can use it for more expressive operations like "summ=" and "multiply=" as shown below:
 
 ```clojure
-;; Vector form — order defines scan priority
+;; Build a registry — vector order defines scan priority
 (def command-registry
   (commando/registry-create
 	[commands-builtin/command-from-spec
@@ -572,19 +572,16 @@ Now you can use it for more expressive operations like "summ=" and "multiply=" a
 				(apply (:CALC= m) (:ARGS m)))
 	  :dependencies {:mode :all-inside}}]))
 
-;; Map form — explicit type keys
-(def command-registry
-  (commando/registry-create
-	{:commando/from commands-builtin/command-from-spec
-	 :CALC=        {:type :CALC=
-	                :recognize-fn #(and (map? %) (contains? % :CALC=))
-	                :validate-params-fn (fn [m]
-	                                      (and
-	                                        (fn? (:CALC= m))
-	                                        (not-empty (:ARGS m))))
-	                :apply (fn [_instruction _command m]
-	                          (apply (:CALC= m) (:ARGS m)))
-	                :dependencies {:mode :all-inside}}}))
+;; Modify a built registry
+(def extended-registry
+  (commando/registry-add command-registry
+    {:type :NEW-CMD
+     :recognize-fn #(and (map? %) (contains? % :NEW-CMD))
+     :apply (fn [_ _ m] (:NEW-CMD m))
+     :dependencies {:mode :none}}))
+
+(def shrunk-registry
+  (commando/registry-remove extended-registry :NEW-CMD))
 
 (commando/execute
   command-registry

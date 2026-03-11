@@ -12,10 +12,9 @@
 ;; -- Registry API --
 
 (defn registry-create
-  "Creates a 'Command' registry from a map or vector of CommandMapSpecs.
+  "Creates a 'Command' registry from a vector of CommandMapSpecs.
 
    Accepts either:
-   - A map of {type -> CommandMapSpec}
    - A vector of CommandMapSpecs (order defines command scan priority)
    - An already-built registry (returned as-is)
 
@@ -44,47 +43,38 @@
 
    The function returns a built registry that can be used to resolve Instruction
 
-  Example (map)
-   (registry-create
-     {:commando/from commando.commands.builtin/command-from-spec
-      :commando/fn   commando.commands.builtin/command-fn-spec})
-
-  Example (vector — order defines scan priority)
+  Example:
    (registry-create
      [commando.commands.builtin/command-from-spec
       commando.commands.builtin/command-fn-spec])"
-  ([registry]
-   (registry-create registry nil))
-  ([registry opts]
-   (cond
-     (registry/built? registry) registry
-     (vector? registry) (let [specs-map (into {} (map (juxt :type identity)) registry)
-                              order     (mapv :type registry)]
-                          (registry/build specs-map (merge opts {:registry-order order})))
-     (map? registry) (registry/build registry opts)
-     :else (throw (ex-info "Registry must be a map, vector, or a built registry"
-                           {:registry registry})))))
+  [registry]
+  (cond
+    (registry/built? registry) registry
+    (vector? registry) (registry/build registry)
+    :else (throw (ex-info "Registry must be a vector or a built registry"
+                         {:registry registry}))))
 
-(defn registry-assoc
+(defn registry-add
   "Adds or replaces a CommandMapSpec in a built registry.
-   The spec is keyed by `command-map-spec-type` and appended to the scan order
-   if not already present. Revalidates the registry.
+   Identification is by the spec's :type key. If a spec with the same :type
+   already exists it is replaced; otherwise the new spec is appended.
+   Revalidates the registry.
 
    Example:
-     (-> (registry-create {...})
-         (registry-assoc :my/cmd my-cmd-spec))"
-  [built-registry command-map-spec-type command-map-spec]
-  (registry/registry-assoc built-registry command-map-spec-type command-map-spec))
+     (-> (registry-create [...])
+         (registry-add my-cmd-spec))"
+  [built-registry command-map-spec]
+  (registry/registry-add built-registry command-map-spec))
 
-(defn registry-dissoc
-  "Removes a CommandMapSpec from a built registry by its type key.
-   Updates the scan order accordingly. Revalidates the registry.
+(defn registry-remove
+  "Removes a CommandMapSpec from a built registry by its :type.
+   Revalidates the registry.
 
    Example:
-     (-> (registry-create {...})
-         (registry-dissoc :my/cmd))"
+     (-> (registry-create [...])
+         (registry-remove :my/cmd))"
   [built-registry command-map-spec-type]
-  (registry/registry-dissoc built-registry command-map-spec-type))
+  (registry/registry-remove built-registry command-map-spec-type))
 
 ;; -- Core Steps --
 
@@ -168,7 +158,7 @@
 
 (defn execute
   [registry instruction]
-  {:pre [(or (map? registry) (vector? registry))]}
+  {:pre [(or (vector? registry) (registry/built? registry))]}
   (binding [utils/*execute-internals* (utils/-execute-internals-push (str (random-uuid)))]
     (let [start-time (utils/now)]
       (-> (smap/status-map-pure {:instruction instruction})

@@ -17,10 +17,9 @@ REDESIGNED Registry. Registry is now a map-based structure (`{:type spec, ...}`)
 ```clojure
 ;; vector — order = scan priority
 (registry-create [from-spec fn-spec])
-;; map — explicit keys
-(registry-create {:commando/from from-spec, :commando/fn fn-spec})
 ```
-Built registry can be modified with `registry-assoc` / `registry-dissoc` without rebuilding from scratch.
+Built registry can be modified with `registry-add` / `registry-remove` (identification by `:type` key).
+`registry-assoc` / `registry-dissoc` removed. Map input form for `registry-create` removed — only vectors accepted.
 
 RENAMED `create-registry` → `registry-create`. Old name removed.
 

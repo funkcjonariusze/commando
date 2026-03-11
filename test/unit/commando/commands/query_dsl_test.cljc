@@ -39,10 +39,10 @@
 
 (def registry
   (commando/registry-create
-   {:commando/resolve command-query-dsl/command-resolve-spec
-    :commando/fn command-builtin/command-fn-spec
-    :commando/from command-builtin/command-from-spec
-    :commando/apply command-builtin/command-apply-spec}))
+   [command-query-dsl/command-resolve-spec
+    command-builtin/command-fn-spec
+    command-builtin/command-from-spec
+    command-builtin/command-apply-spec]))
 
 (defn get-permissions-by-name [permission-name]
   (first (filter (fn [x] (= permission-name (:permission-name x))) (:permissions db))))
