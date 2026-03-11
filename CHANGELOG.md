@@ -1,5 +1,7 @@
 # 1.0.6
 
+ADDED `command-context-spec` in `commando.commands.builtin`. A new command type `:commando/context` (string form: `"commando-context"`) that injects external reference data into instructions via closure. Call `(command-context-spec ctx-map)` to create a CommandMapSpec. Resolves with `{:mode :none}` — before all other commands, so `:commando/from` and `:commando/fn` can depend on context results. Supports `:=` transform, `:default` fallback for missing paths, and returns `nil` when path is not found without `:default`. Full malli validation for both keyword and string key forms.
+
 REDESIGNED Registry. Registry is now a map-based structure (`{:type spec, ...}`) instead of a plain vector. `registry-create` accepts both formats:
 ```clojure
 ;; vector — order = scan priority

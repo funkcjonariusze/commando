@@ -114,8 +114,8 @@
       (into (mapv registry registry-order)
         internal-command-specs))))
 
-(defn reset-runtime-registry [enreached-registry]
-  (dissoc enreached-registry :registry-runtime))
+(defn reset-runtime-registry [enriched-registry]
+  (dissoc enriched-registry :registry-runtime))
 
 (defn remove-runtime-registry-commands-from-command-list [cm-vector]
   (let [cm-type-instruction-defaults

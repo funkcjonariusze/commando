@@ -105,9 +105,6 @@
 ;; FROM-SPEC
 ;; ===========================
 
-
-
-
 (deftest command-from-spec
   ;; -------------------
   (testing "Successfull test cases"
@@ -314,6 +311,75 @@
                             "should be a string"]},
                :path [:a], :value {:commando/from [:v], := ["BROKEN"]}})))
       "Waiting on error, ':validate-params-fn' for commando/from. Wrong type for optional ':=' applicator")))
+
+;; ===========================
+;; CONTEXT-SPEC
+;; ===========================
+
+(def test-ctx
+  {:colors  {:red "#FF0000" :blue "#0000FF"}
+   :numbers [10 20 30]
+   :nested  {:a {:b {:c 42}}}})
+
+(deftest command-context-spec-success
+  (let [ctx-spec (command-builtin/command-context-spec test-ctx)]
+    (testing "Successfull test cases"
+      (is (= {:color "#FF0000" :number 10 :deep 42}
+            (:instruction
+             (commando/execute {:commando/context ctx-spec}
+               {:color  {:commando/context [:colors :red]}
+                :number {:commando/context [:numbers 0]}
+                :deep   {:commando/context [:nested :a :b :c]}})))
+        "Should resolve keyword path in context with varios deepnest")
+
+      (is (= {:val "#0000FF" :count 2}
+            (:instruction
+             (commando/execute {:commando/context ctx-spec}
+               {:count {:commando/context [:colors] := count}
+                :val {:commando/context [:colors] := :blue}})))
+        "Should apply := fn to resolved value")
+
+      (is (= {:val-default "fallback" :val-nil nil}
+            (:instruction
+             (commando/execute {:commando/context ctx-spec}
+               {:val-default {:commando/context [:nonexistent] :default "fallback"}
+                :val-nil     {:commando/context [:nonexistent] :default nil}})))
+        "Should return :default value when path not found, in other way 'nil' value without exception ")
+
+      (let [str-ctx {"lang" {"ua" "Ukrainian" "en" "English"}}
+            str-spec (command-builtin/command-context-spec str-ctx)]
+        (is (= {"val" "Ukrainian" "val-default" "none" "val-=" "English"}
+              (:instruction
+               (commando/execute {:commando/context str-spec}
+                 {"val"          {"commando-context" ["lang" "ua"]}
+                  "val-="        {"commando-context" ["lang"] "=" "en"}
+                  "val-default"  {"commando-context" ["missing"] "default" "none"}})))
+          "String keys test")))
+    (testing "Failure test cases"
+      (is (helpers/status-map-contains-error?
+            (binding [commando-utils/*execute-config*
+                      {:debug-result false :error-data-string false}]
+              (commando/execute {:commando/context ctx-spec}
+                {:val {:commando/context "NOT-A-PATH"}}))
+            (fn [error]
+              (= (-> error :error :data)
+                {:command-type :commando/context
+                 :reason {:commando/context ["commando/context should be a sequential path: [:some :key]"]}
+                 :path [:val]
+                 :value {:commando/context "NOT-A-PATH"}})))
+        "Should fail validation when path is not sequential")
+      (is (helpers/status-map-contains-error?
+            (binding [commando-utils/*execute-config*
+                      {:debug-result false :error-data-string false}]
+              (commando/execute {:commando/context ctx-spec}
+                {:val {:commando/context [:colors] "commando-context" ["colors"]}}))
+            (fn [error]
+              (= (-> error :error :data)
+                {:command-type :commando/context
+                 :reason "The keyword :commando/context and the string \"commando-context\" cannot be used simultaneously in one command."
+                 :path [:val]
+                 :value {:commando/context [:colors] "commando-context" ["colors"]}})))
+        "Should not allow both keyword and string form"))))
 
 
 ;; ===========================
