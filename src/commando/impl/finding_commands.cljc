@@ -44,7 +44,7 @@
   "Finds and validates a command from registry that matches the given `value`.
    Returns the command-spec if match is found and valid, nil otherwise.
    Throws exception if match is found but validation fails."
-  [command-registry value path]
+  [command-spec-vector value path]
   (some (fn [command-spec]
           (when (command? command-spec value)
             (let [value-valid-return (command-valid? command-spec value)]
@@ -69,11 +69,11 @@
                      :reason value-valid-return
                      :path path
                      :value value}))))))
-        command-registry))
+        command-spec-vector))
 
 (defn find-commands
   "Traverses the instruction tree (BFS algo) and collects all commands defined by the registry."
-  [instruction command-registry]
+  [instruction {:keys [registry-runtime] :as _command-registry}]
   (loop [queue (vec [[]])
          found-commands []
          debug-stack-map {}]
@@ -83,7 +83,7 @@
             remaining-paths (subvec queue 1)
             current-value (get-in instruction current-path)
             debug-stack (if (:debug-result (utils/execute-config)) (get debug-stack-map current-path (list)) (list))]
-        (if-let [command-spec (instruction-command-spec command-registry current-value current-path)]
+        (if-let [command-spec (instruction-command-spec registry-runtime current-value current-path)]
           (let [command (cm/->CommandMapPath
                          current-path
                          (if (:debug-result (utils/execute-config)) (merge command-spec {:__debug_stack debug-stack}) command-spec))
@@ -96,4 +96,3 @@
           (recur (into remaining-paths (coll-child-paths current-value current-path))
                  found-commands
                  debug-stack-map))))))
-

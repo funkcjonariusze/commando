@@ -8,8 +8,15 @@
    [commando.impl.status-map       :as smap]
    [commando.impl.utils            :as utils]))
 
-(defn create-registry
-  "Creates a 'Command' registry from a vector of CommandMapSpecs:
+;; -- Registry API --
+
+(defn registry-create
+  "Creates a 'Command' registry from a map or vector of CommandMapSpecs.
+
+   Accepts either:
+   - A map of {type -> CommandMapSpec}
+   - A vector of CommandMapSpecs (order defines command scan priority)
+   - An already-built registry (returned as-is)
 
    Each command specification (CommandMapSpec) should be a map containing at least:
    - `:type` - a unique keyword identifying the command type
@@ -18,46 +25,83 @@
    - `:apply` - a function to execute the command:
         (fn [instruction command-map-obj command-data] ...)
    - `:dependencies` - declare way the command should build dependency
-        {:mode :all-inside} - all commands inside the current map are depednencies
+        {:mode :all-inside} - all commands inside the current map are dependencies
         {:mode :none} - no dependencies, the other commands may depend from it.
         {:mode :point :point-key [:commando/from]} - special type of dependency
-             which declare that current command depends from the command it refer by 
+             which declare that current command depends from the command it refer by
              exampled :commando/from key.
 
    Additional optional keys can include:
-   - `:validate-params-fn` - a function to validate command structures, and catch 
-          invalid parameters at the anylisis stage. Only if the function 
-          return 'true' it ment that the command structure is valid.
+   - `:validate-params-fn` - a function to validate command structures, and catch
+          invalid parameters at the analysis stage. Only if the function
+          return 'true' it meant that the command structure is valid.
           (fn [data] (throw ...))        => Failure
           (fn [data] {:reason \"why\"})  => Failure
           (fn [data] nil )               => Failure
           (fn [data] false )             => Failure
           (fn [data] true )              => OK
 
-   The function returns a built registry that can be used to resolve Instruction 
-  
-  Example 
-   (create-registry 
-     [{:type :print :recognize-fn ... :execute-fn ...}
-      commando.commands.builtin/command-fn-spec
-      commando.commands.builtin/command-apply-spec
-      commando.commands.builtin/command-mutation-spec
-      commando.commands.builtin/command-resolve-spec])"
-  [registry]
-  (registry/build (vec registry)))
+   The function returns a built registry that can be used to resolve Instruction
+
+  Example (map)
+   (registry-create
+     {:commando/from commando.commands.builtin/command-from-spec
+      :commando/fn   commando.commands.builtin/command-fn-spec})
+
+  Example (vector — order defines scan priority)
+   (registry-create
+     [commando.commands.builtin/command-from-spec
+      commando.commands.builtin/command-fn-spec])"
+  ([registry]
+   (registry-create registry nil))
+  ([registry opts]
+   (cond
+     (registry/built? registry) registry
+     (vector? registry) (let [specs-map (into {} (map (juxt :type identity)) registry)
+                              order     (mapv :type registry)]
+                          (registry/build specs-map (merge opts {:registry-order order})))
+     (map? registry) (registry/build registry opts)
+     :else (throw (ex-info "Registry must be a map, vector, or a built registry"
+                           {:registry registry})))))
+
+(defn registry-assoc
+  "Adds or replaces a CommandMapSpec in a built registry.
+   The spec is keyed by `command-map-spec-type` and appended to the scan order
+   if not already present. Revalidates the registry.
+
+   Example:
+     (-> (registry-create {...})
+         (registry-assoc :my/cmd my-cmd-spec))"
+  [built-registry command-map-spec-type command-map-spec]
+  (registry/registry-assoc built-registry command-map-spec-type command-map-spec))
+
+(defn registry-dissoc
+  "Removes a CommandMapSpec from a built registry by its type key.
+   Updates the scan order accordingly. Revalidates the registry.
+
+   Example:
+     (-> (registry-create {...})
+         (registry-dissoc :my/cmd))"
+  [built-registry command-map-spec-type]
+  (registry/registry-dissoc built-registry command-map-spec-type))
+
+;; -- Execute Flow --
 
 (defn ^:private use-registry
   [status-map registry]
   (let [start-time (utils/now)
         result     (case (:status status-map)
                      :failed (-> status-map
-                                 (smap/status-map-handle-warning {:message "Skip step with registry check"}))
+                               (smap/status-map-handle-warning {:message "Skip step with registry check"}))
                      :ok (try (-> status-map
-                                  (assoc :registry (if (registry/built? registry) registry (create-registry registry))))
+                                (assoc :registry
+                                  (->
+                                    (registry-create registry)
+                                    (registry/enrich-runtime-registry))))
                               (catch #?(:clj Exception
                                         :cljs :default)
-                                e
-                                (-> status-map
+                                  e
+                                  (-> status-map
                                     (smap/status-map-handle-error {:message "Invalid registry specification"
                                                                    :error (utils/serialize-exception e)})))))]
     (smap/status-map-add-measurement result "use-registry" start-time (utils/now))))
@@ -118,8 +162,7 @@
                                  (smap/status-map-handle-warning {:message (str utils/exception-message-header
                                                                                 "sort-entities-by-deps. Skipping mandatory step")}))
                      :ok (let [sort-result (graph/topological-sort (:internal/cm-dependency status-map))
-                               status-map (assoc status-map :internal/cm-running-order (vec ;; (reverse (:sorted sort-result))
-                                                                                         (:sorted sort-result)))]
+                               status-map (assoc status-map :internal/cm-running-order (vec (:sorted sort-result)))]
                            (if (not-empty (:cyclic sort-result))
                              (smap/status-map-handle-error status-map
                                                            {:message (str utils/exception-message-header
@@ -158,72 +201,28 @@
                                      (smap/status-map-handle-success {:message "All commands executed successfully"}))))))]
     (smap/status-map-add-measurement result "execute-commands!" start-time (utils/now))))
 
-(defn build-compiler
-  [registry instruction]
-  (let [status-map (-> (smap/status-map-pure {:instruction instruction})
-                     (utils/hook-process (:hook-execute-start (utils/execute-config)))
-                     (use-registry registry)
-                     (find-commands)
-                     (build-deps-tree)
-                     (sort-commands-by-deps))]
-    (case (:status status-map)
-      :failed (-> status-map
-                (smap/status-map-handle-warning {:message (str utils/exception-message-header
-                                                            "build-compiler. Error building compiler")}))
-      :ok (cond-> status-map
-            true (update-in [:internal/cm-running-order] registry/remove-instruction-commands-from-command-vector)
-            (false? (:debug-result (utils/execute-config)))
-            (select-keys [:uuid
-                          :status
-                          :registry
-                          :internal/cm-running-order
-                          :successes
-                          :warnings])))))
-
-(defn ^:private compiler->status-map
-  "Cause compiler contains only two :registry and :internal/cm-running-order keys
-  they have to be added to status-map before it be executed."
-  [compiler]
-  (if (and (registry/built? (get compiler :registry))
-           (contains? compiler :internal/cm-running-order)
-           (contains? compiler :status))
-    (case (:status compiler)
-      :ok (if (true? (:debug-result (utils/execute-config)))
-            (->
-              (smap/status-map-pure compiler))
-            (->
-              (smap/status-map-pure (select-keys compiler
-                                      [:uuid
-                                       :registry
-                                       :internal/cm-running-order
-                                       :successes
-                                       :warnings]))))
-      :failed compiler)
-    (->
-      (smap/status-map-pure compiler)
-      (smap/status-map-handle-error {:message "Corrupted compiler structure"}))))
-
 (defn execute
-  [registry-or-compiler instruction]
-  {:pre [(or (map? registry-or-compiler) (sequential? registry-or-compiler))]}
+  [registry instruction]
+  {:pre [(or (map? registry) (vector? registry))]}
   (binding [utils/*execute-internals* (utils/-execute-internals-push (str (random-uuid)))]
-   (let [ ;; Under (build-compiler) we ment the unfinished status map
-         start-time (utils/now)
-         status-map-with-compiler (-> (cond
-                                        (map? registry-or-compiler)
-                                        (->
-                                          (compiler->status-map registry-or-compiler))
-                                        (sequential? registry-or-compiler)
-                                        (->
-                                          (build-compiler registry-or-compiler instruction)
-                                          (compiler->status-map)))
-                                    (assoc :instruction instruction))]
-     (cond-> (execute-commands! status-map-with-compiler)
-       (false? (:debug-result (utils/execute-config))) (dissoc :internal/cm-running-order)
-       (false? (:debug-result (utils/execute-config))) (dissoc :registry)
-       :always (smap/status-map-add-measurement "execute" start-time (utils/now))
-       :always (utils/hook-process (:hook-execute-end (utils/execute-config)))))))
+   (let [start-time (utils/now)
+         status-map (-> (smap/status-map-pure {:instruction instruction})
+                        (utils/hook-process (:hook-execute-start (utils/execute-config)))
+                        (use-registry registry)
+                        (find-commands)
+                        (build-deps-tree)
+                        (sort-commands-by-deps))]
+     (let [status-map-ready
+           (case (:status status-map)
+             :failed status-map
+             :ok (-> status-map
+                   (update :internal/cm-running-order registry/remove-runtime-registry-commands-from-command-list)
+                   (update :registry registry/reset-runtime-registry)))]
+       (cond-> (execute-commands! (assoc status-map-ready :instruction instruction))
+         (false? (:debug-result (utils/execute-config))) (dissoc :internal/cm-running-order)
+         (false? (:debug-result (utils/execute-config))) (dissoc :registry)
+         :always (smap/status-map-add-measurement "execute" start-time (utils/now))
+         :always (utils/hook-process (:hook-execute-end (utils/execute-config))))))))
 
 (defn failed? [status-map] (smap/failed? status-map))
 (defn ok? [status-map] (smap/ok? status-map))
-
