@@ -93,7 +93,7 @@
     (fn [sm]
       (assoc sm :registry
         (-> (registry-create registry)
-            (registry/enreach-runtime-registry))))))
+            (registry/enrich-runtime-registry))))))
 
 (defn ^:private find-commands
   [{:keys [instruction registry] :as status-map}]
