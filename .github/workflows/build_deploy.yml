@@ -38,7 +38,7 @@ jobs:
       run: clojure -M:cljs-test
 
     - name: Build JAR
-      run: clojure -M:build jar
+      run: clojure -T:build jar
 
     - name: Deploy to Clojars
       run: clojure -X:deploy
