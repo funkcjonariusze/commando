@@ -98,12 +98,9 @@
   [{:keys [instruction] :internal/keys [cm-list] :as status-map}]
   (smap/core-step-safe status-map "build-deps-tree"
     (fn [sm]
-      (try
-        (-> sm
-            (assoc :internal/cm-dependency (deps/build-dependency-graph instruction cm-list))
-            (smap/status-map-handle-success {:message "Dependency map was successfully built"}))
-        (catch #?(:clj clojure.lang.ExceptionInfo :cljs :default) e
-          (smap/status-map-handle-error sm (ex-data e)))))))
+      (-> sm
+        (assoc :internal/cm-dependency (deps/build-dependency-graph instruction cm-list))
+        (smap/status-map-handle-success {:message "Dependency map was successfully built"})))))
 
 (defn ^:private sort-commands-by-deps
   [status-map]

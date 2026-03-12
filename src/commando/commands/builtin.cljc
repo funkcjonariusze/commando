@@ -44,7 +44,9 @@
                                     (malli/explain
                                       [:map
                                        [:commando/fn utils/ResolvableFn]
-                                       [:args {:optional true} coll?]]
+                                       [:args {:optional true} coll?]
+                                       [:=> {:optional true} utils/malli:driver-spec]
+                                       ["=>" {:optional true} utils/malli:driver-spec]]
                                       m))]
                            m-explain
                            true))
@@ -80,7 +82,10 @@
    :validate-params-fn (fn [m]
                          (if-let [m-explain
                                   (malli-error/humanize
-                                    (malli/explain [:map [:commando/apply :any]] m))]
+                                    (malli/explain [:map
+                                                    [:commando/apply :any]
+                                                    [:=> {:optional true} utils/malli:driver-spec]
+                                                    ["=>" {:optional true} utils/malli:driver-spec]] m))]
                            m-explain
                            true))
    :apply (fn [_instruction _command-path-obj command-map]
@@ -101,7 +106,7 @@
   Description
     command-from-spec - get value from another command or existing value
     in Instruction. Path to another command is passed inside `:commando/from`
-    key, optionally you can apply `:=` function/symbol/keyword to the result.
+    key, optionally you can apply `:=>` driver to the result.
 
     Path can be sequence of keywords, strings or integers, starting absolutely from
     the root of Instruction, or relatively from the current command position by
@@ -155,15 +160,23 @@
                                    (contains? m :commando/from)
                                    (contains? m "commando-from"))
                                  "The keyword :commando/from and the string \"commando-from\" cannot be used simultaneously in one command."
+
                                  (contains? m :commando/from)
                                  (malli-error/humanize
                                    (malli/explain
-                                     [:map [:commando/from -malli:commando-from-path]]
+                                     [:map
+                                      [:commando/from -malli:commando-from-path]
+                                      [:=> {:optional true} utils/malli:driver-spec]
+                                      ["=>" {:optional true} utils/malli:driver-spec]]
                                      m))
+
                                  (contains? m "commando-from")
                                  (malli-error/humanize
                                    (malli/explain
-                                     [:map ["commando-from" -malli:commando-from-path]]
+                                     [:map
+                                      ["commando-from" -malli:commando-from-path]
+                                      [:=> {:optional true} utils/malli:driver-spec]
+                                      ["=>" {:optional true} utils/malli:driver-spec]]
                                      m)))]
                            (if m-explain
                              m-explain
@@ -238,7 +251,8 @@
                    [:map
                     [kw-key [:sequential {:error/message "commando/context should be a sequential path: [:some :key]"}
                              [:or :string :keyword :int]]]
-                    [:default {:optional true} :any]]
+                    [:=> {:optional true} utils/malli:driver-spec]
+                    ["=>" {:optional true} utils/malli:driver-spec]]
                    m))
                (contains? m str-key)
                (malli-error/humanize
@@ -246,21 +260,14 @@
                    [:map
                     [str-key [:sequential {:error/message "commando-context should be a sequential path: [\"some\" \"key\"]"}
                               [:or :string :keyword :int]]]
-                    ["default" {:optional true} :any]]
+                    [:=> {:optional true} utils/malli:driver-spec]
+                    ["=>" {:optional true} utils/malli:driver-spec]]
                    m)))]
          (if m-explain m-explain true)))
      :apply
      (fn [_instruction _command-path-obj command-map]
-       (let [path (or (get command-map kw-key) (get command-map str-key))
-             has-default? (or (contains? command-map :default)
-                              (contains? command-map "default"))
-             m-default (if (contains? command-map :default)
-                         (:default command-map)
-                         (get command-map "default"))
-             result (get-in ctx path ::not-found)]
-         (if (= result ::not-found)
-           (if has-default? m-default nil)
-           result)))
+       (let [path (or (get command-map kw-key) (get command-map str-key))]
+         (get-in ctx path nil)))
      :dependencies {:mode :none}}))
 
 ;; ======================
@@ -334,12 +341,16 @@
                                  (contains? m :commando/mutation)
                                  (malli-error/humanize
                                    (malli/explain
-                                     [:map [:commando/mutation [:or :keyword :string]]]
+                                     [:map [:commando/mutation [:or :keyword :string]]
+                                      [:=> {:optional true} utils/malli:driver-spec]
+                                      ["=>" {:optional true} utils/malli:driver-spec]]
                                      m))
                                  (contains? m "commando-mutation")
                                  (malli-error/humanize
                                    (malli/explain
-                                     [:map ["commando-mutation" [:or :keyword :string]]]
+                                     [:map ["commando-mutation" [:or :keyword :string]]
+                                      [:=> {:optional true} utils/malli:driver-spec]
+                                      ["=>" {:optional true} utils/malli:driver-spec]]
                                      m)))]
                            (if m-explain
                              m-explain
@@ -466,13 +477,17 @@
                                  (malli-error/humanize
                                    (malli/explain
                                      [:map
-                                      [:commando/macro [:or :keyword :string]]]
+                                      [:commando/macro [:or :keyword :string]]
+                                      [:=> {:optional true} utils/malli:driver-spec]
+                                      ["=>" {:optional true} utils/malli:driver-spec]]
                                      m))
                                  (contains? m "commando-macro")
                                  (malli-error/humanize
                                    (malli/explain
                                      [:map
-                                      ["commando-macro" [:or :keyword :string]]]
+                                      ["commando-macro" [:or :keyword :string]]
+                                      [:=> {:optional true} utils/malli:driver-spec]
+                                      ["=>" {:optional true} utils/malli:driver-spec]]
                                      m)))]
                            (if m-explain
                              m-explain

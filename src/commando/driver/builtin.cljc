@@ -28,6 +28,16 @@
   ;; => [:identity] pass-through
   applied-result)
 
+;; -- default --
+
+(defmethod executing/command-driver :default
+  [_ driver-params applied-result _command-data _instruction _command-path-obj]
+  ;; => [:identity] pass-through
+  (let [default-value (first driver-params)]
+    (if (nil? applied-result)
+      default-value
+      applied-result)))
+
 ;; -- :get-in --
 
 (defmethod executing/command-driver :get-in

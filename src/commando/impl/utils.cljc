@@ -147,6 +147,23 @@
     (fn [x]
       (some? (resolve-fn x)))]))
 
+(def malli:driver-step-spec
+  "Defines a single step in a driver pipeline or a standalone driver invocation."
+  (malli/deref
+   [:or
+    :keyword
+    :string
+    [:cat
+     [:or :keyword :string]
+     [:* :any]]]))
+
+(def malli:driver-spec
+  (malli/deref
+   [:or
+    malli:driver-step-spec
+    [:cat
+     [:* malli:driver-step-spec]]]))
+
 ;; -----------------
 ;; Performance Tools
 ;; -----------------

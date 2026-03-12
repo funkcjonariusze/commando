@@ -8,22 +8,15 @@
 "=" "name"            → "=>" ["get" "name"],
 ```
 
-Built-in drivers: `:identity` (default), `:get`, `:get-in`, `:select-keys`, `:projection`, `:fn`. Supports pipelines (`[[:get :city] :uppercase]`) and custom drivers via `commando.impl.executing/command-driver` multimethod. See [README](./README.md) for details.
+Built-in drivers: `:identity` (default), `:default`, `:get`, `:get-in`, `:select-keys`, `:projection`, `:fn`. Supports pipelines (`[[:get :city] :uppercase]`) and custom drivers via `commando.impl.executing/command-driver` multimethod. See [README](./README.md) for details.
 
+ADDED `command-context-spec` in `commando.commands.builtin`. A new command type `:commando/context` (string form: `"commando-context"`) that injects external reference data into instructions via closure. Call `(command-context-spec ctx-map)` to create a CommandMapSpec. Resolves with `{:mode :none}` — before all other commands, so `:commando/from` and `:commando/fn` can depend on context results.
 
-ADDED `command-context-spec` in `commando.commands.builtin`. A new command type `:commando/context` (string form: `"commando-context"`) that injects external reference data into instructions via closure. Call `(command-context-spec ctx-map)` to create a CommandMapSpec. Resolves with `{:mode :none}` — before all other commands, so `:commando/from` and `:commando/fn` can depend on context results. Supports `:=>` driver transform, `:default` fallback for missing paths, and returns `nil` when path is not found without `:default`. Full malli validation for both keyword and string key forms.
-
-REDESIGNED Registry. Registry is now a map-based structure (`{:type spec, ...}`) instead of a plain vector. `registry-create` accepts both formats:
-```clojure
-;; vector — order = scan priority
-(registry-create [from-spec fn-spec])
-```
-Built registry can be modified with `registry-add` / `registry-remove` (identification by `:type` key).
-`registry-assoc` / `registry-dissoc` removed. Map input form for `registry-create` removed — only vectors accepted.
+ADDED option to modify already built registry with `registry-add` / `registry-remove` methods (identification by `:type` key).
 
 RENAMED `create-registry` → `registry-create`. Old name removed.
 
-REMOVED `build-compiler`. Compiler concept removed from the pipeline; optimizations for repeated `execute` calls will be introduced in a future version.
+REMOVED `build-compiler`. Compiler concept removed from the core functionality; optimizations for repeated `execute` calls will be introduced in a future version.
 
 ADDED `print-trace` in `commando.impl.utils` — replaces `print-deep-stats` with an improved flamegraph that also shows per-node instruction keys and optional title. Add `:__title` or `"__title"` to any instruction's top level to annotate that node in the output. `print-deep-stats` is kept as a deprecated alias.
 
