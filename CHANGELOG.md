@@ -10,7 +10,7 @@ FIXED `crop-final-status-map` in `commando.core` — internal keys (`:internal/c
 
 FIXED `execute-command-impl` in `commando.impl.executing` — added guard for non-map `command-data` before calling `dissoc` on driver keys (`:=>`, `"=>`), preventing errors when command data is a non-map value.
 
-UPDATED documentation — restructured `README.md` with improved navigation, added "Managing the Registry" and "Debugging" sections. Moved doc files from `doc/` to `examples/` directory with richer, runnable code examples: `walkthrough.clj`, `integrant.clj`, `json.clj`, `reitit.clj`, `reagent_front.cljs`.
+UPDATED documentation — restructured `README.md` with improved navigation, added "Managing the Registry" and "Debugging" sections. Moved doc files from `doc/` to `examples/` directory with richer, runnable code examples: `walkthrough.clj`, `integrant.clj`, `component.clj`, `json.clj`, `reitit.clj`, `reagent_front.cljs`.
 
 UPDATED tests — split monolithic `core_test.cljc` into focused test namespaces: `dependency_test.cljc`, `finding_commands_test.cljc`, `graph_test.cljc`. Added `debug_test.cljc` for the new debug module. Updated performance tests.
 

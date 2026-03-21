@@ -6,7 +6,7 @@
 [![Run tests](https://github.com/funkcjonariusze/commando/actions/workflows/unit_test.yml/badge.svg)](https://github.com/funkcjonariusze/commando/actions/workflows/unit_test.yml)
 [![cljdoc badge](https://cljdoc.org/badge/org.clojars.funkcjonariusze/commando)](https://cljdoc.org/d/org.clojars.funkcjonariusze/commando/1.1.1)
 
-**Commando** is a flexible Clojure library for managing, extracting, and transforming data inside nested map structures aimed to build your own Data DSL.
+**Commando** is a flexible Clojure/ClojureScript library for building data-driven DSLs.
 
 ## Content
 
@@ -984,6 +984,7 @@ To test the limits of the library, we benchmarked it with instructions containin
 - [Work with JSON](./examples/json.clj) — sending instructions over the wire as JSON, keyword handling, string-keyed commands
 - [Frontend + Reagent](./examples/reagent_front.cljs) — using Commando with Reagent on the frontend
 - [Commando + Integrant](./examples/integrant.clj) — wiring Commando into an Integrant system
+- [Commando + Component](./examples/component.clj) — replacing Component + Aero with a single Commando instruction
 - [Commando + Reitit](./examples/reitit.clj) — HTTP handler with Transit and Reitit
 - [Commando QueryDSL](./examples/query_dsl.md) — lightweight query mechanism as an alternative to GraphQL/Pathom
 
