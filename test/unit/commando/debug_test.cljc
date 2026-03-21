@@ -148,7 +148,7 @@
 (defmethod builtin/command-macro :v-str->v-int
   [_macro-type {:keys [vector-str]}]
   {:commando/fn (fn [str-vec]
-                  (mapv #(Integer/parseInt %) str-vec))
+                  (mapv #(#?(:clj Integer/parseInt :cljs js/parseInt) %) str-vec))
    :args [vector-str]})
 
 (defmethod builtin/command-macro :vector-dot-product
