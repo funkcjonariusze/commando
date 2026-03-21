@@ -9,11 +9,14 @@
 ;; that a plain Integrant map cannot do on its own.
 ;;
 ;; This walkthrough shows:
-;; 1. The problem with vanilla Integrant configs
-;; 2. Three custom commands that solve it
-;; 3. A side-by-side comparison
+;; 1. Stub components you can run in the REPL
+;; 2. The problem with vanilla Integrant configs
+;; 3. Three custom commands that solve it
+;; 4. A full end-to-end example with `ig/init` & `ig/halt!`
 ;;
 ;; Evaluate each form in your REPL to follow along.
+;; Everything here is self-contained — no external deps
+;; beyond Commando and Integrant.
 
 
 ;; ┌─────────────────────────────────────────────────────┐
@@ -26,22 +29,65 @@
 
 
 ;; ┌─────────────────────────────────────────────────────┐
-;; │ 2. THE VANILLA INTEGRANT WAY                        │
+;; │ 2. STUB COMPONENTS                                  │
+;; └─────────────────────────────────────────────────────┘
+;;
+;; In a real app, these would be actual database pools
+;; and HTTP servers. Here we define stub implementations
+;; so the entire walkthrough is executable.
+
+;; A trivial Ring handler — returns a fixed response.
+(defn stub-handler [request]
+  {:status  200
+   :headers {"Content-Type" "text/plain"}
+   :body    "OK"})
+
+;; :component/sqlite — pretends to open a SQLite connection.
+(defmethod ig/init-key :component/sqlite [_ config]
+  (println ";; [init] :component/sqlite" (select-keys config [:dbtype :dbname]))
+  (assoc config :status :running))
+
+(defmethod ig/halt-key! :component/sqlite [_ component]
+  (println ";; [halt] :component/sqlite")
+  nil)
+
+;; :component/jetty — pretends to start an HTTP server.
+(defmethod ig/init-key :component/jetty [_ {:keys [port] :as config}]
+  (println (str ";; [init] :component/jetty on port " port))
+  (assoc config :status :running))
+
+(defmethod ig/halt-key! :component/jetty [_ {:keys [port]}]
+  (println (str ";; [halt] :component/jetty on port " port))
+  nil)
+
+
+;; ┌─────────────────────────────────────────────────────┐
+;; │ 3. THE VANILLA INTEGRANT WAY                        │
 ;; └─────────────────────────────────────────────────────┘
 ;;
 ;; A typical Integrant config for an HTTP server backed
 ;; by a SQLite database looks like this:
 
-(derive :plug/db          :plugin-sqlite/datasource)
-(derive :plug/http-server :plugin-jetty-server/server-main)
+(derive :app/db   :component/sqlite)
+(derive :app/http :component/jetty)
 
 (def config:integrant-native
-  {:plug/db          {:dbtype "sqlite"
-                      :dbname "storage.db"
-                      :dir    "../../data"}
-   :plug/http-server {:port    2500
-                      :handler #'ring-handler
-                      :db      (ig/ref :plug/db)}})
+  {:app/db   {:dbtype "sqlite"
+              :dbname "app.db"
+              :dir    "./data"}
+   :app/http {:port    2500
+              :handler stub-handler
+              :db      (ig/ref :app/db)}})
+
+;; Try it:
+
+(def sys-vanilla (ig/init config:integrant-native))
+;; => ;; [init] :component/sqlite {:dbtype "sqlite", :dbname "app.db"}
+;; => ;; [init] :component/jetty on port 2500
+
+(ig/halt! sys-vanilla)
+;; => ;; [halt] :component/jetty on port 2500
+;; => ;; [halt] :component/sqlite
 
 ;; This works, but notice three things:
 ;;
@@ -51,13 +97,14 @@
 ;; 2. The `:dir` value is duplicated if multiple components
 ;;    need the same project root.
 ;;
-;; 3. `#ig/ref` is Integrant-specific syntax. If you want
-;;    to validate, transform, or generate configs
-;;    programmatically, you're working against the reader.
+;; 3. `ig/ref` is Integrant-specific. If you want to
+;;    validate, transform, or generate configs
+;;    programmatically, you're working against opaque
+;;    objects instead of plain data.
 
 
 ;; ┌─────────────────────────────────────────────────────┐
-;; │ 3. THREE CUSTOM COMMANDS                            │
+;; │ 4. THREE CUSTOM COMMANDS                            │
 ;; └─────────────────────────────────────────────────────┘
 ;;
 ;; We define three CommandMapSpecs that teach Commando
@@ -128,7 +175,7 @@
 
 
 ;; ┌─────────────────────────────────────────────────────┐
-;; │ 4. THE COMMANDO WAY                                 │
+;; │ 5. THE COMMANDO WAY                                 │
 ;; └─────────────────────────────────────────────────────┘
 ;;
 ;; Now the same system, described as a Commando instruction.
@@ -144,23 +191,23 @@
 
 (def instruction
   {;; Shared settings — referenced by any component
-   "settings" {:project-root "../../data"}
+   "settings" {:project-root "./data"}
 
    ;; Database component
    "db"
    {"sqlite"
-    {:integrant/component       :plugin-sqlite/datasource
-     :integrant/component-alias :plug/db
+    {:integrant/component       :component/sqlite
+     :integrant/component-alias :app/db
      :dbtype "sqlite"
-     :dbname "storage.db"
+     :dbname "app.db"
      :dir    {:commando/from ["settings" :project-root]}}}
 
    ;; HTTP server component
    "http-server"
-   {:integrant/component       :plugin-jetty-server/server-main
-    :integrant/component-alias :plug/http-server
+   {:integrant/component       :component/jetty
+    :integrant/component-alias :app/http
     :port    2500
-    :handler #'ring-handler
+    :handler stub-handler
     :db      {:integrant/from ["db" "sqlite"]}}
 
    ;; Assemble the final Integrant config
@@ -176,17 +223,25 @@
 (commando/ok? result)
 ;; => true
 
-(get-in result [:instruction "integrant-config"])
-;; => {:plug/db          {:dbtype "sqlite", :dbname "storage.db",
-;;                        :dir "../../data"}
-;;     :plug/http-server {:port 2500, :handler #'ring-handler,
-;;                        :db #ig/ref :plug/db}}
-;;
-;; That's a valid Integrant config — pass it to `ig/init`.
+(def ig-config (get-in result [:instruction "integrant-config"]))
+
+ig-config
+;; => {:app/db   {:dbtype "sqlite", :dbname "app.db", :dir "./data"}
+;;     :app/http {:port 2500, :handler #function, :db #ig/ref :app/db}}
+
+;; That's a valid Integrant config. Start the system:
+
+(def system (ig/init ig-config))
+;; => ;; [init] :component/sqlite {:dbtype "sqlite", :dbname "app.db"}
+;; => ;; [init] :component/jetty on port 2500
+
+(ig/halt! system)
+;; => ;; [halt] :component/jetty on port 2500
+;; => ;; [halt] :component/sqlite
 
 
 ;; ┌─────────────────────────────────────────────────────┐
-;; │ 5. WHY BOTHER?                                      │
+;; │ 6. WHY BOTHER?                                      │
 ;; └─────────────────────────────────────────────────────┘
 ;;
 ;; For two components, the vanilla approach is fine. The
@@ -211,12 +266,11 @@
 ;; d) COMPOSABLE
 ;;    Instructions are data. You can merge them, generate
 ;;    them, or store them in EDN/JSON files. Try doing
-;;    that with `#ig/ref` reader literals and `derive`
-;;    side effects.
+;;    that with `ig/ref` objects and `derive` side effects.
 
 
 ;; ┌─────────────────────────────────────────────────────┐
-;; │ 6. BONUS: ENVIRONMENT VARIABLES                     │
+;; │ 7. BONUS: ENVIRONMENT VARIABLES                     │
 ;; └─────────────────────────────────────────────────────┘
 ;;
 ;; Need to read env vars in your config? Define a command
@@ -239,7 +293,7 @@
 
 
 ;; ┌─────────────────────────────────────────────────────┐
-;; │ 7. PUTTING IT ALL TOGETHER                          │
+;; │ 8. PUTTING IT ALL TOGETHER                          │
 ;; └─────────────────────────────────────────────────────┘
 ;;
 ;; In a real application, the pattern looks like this:
@@ -252,11 +306,15 @@
       (throw (ex-info "Failed to build Integrant config" result))
       (get-in result [:instruction "integrant-config"]))))
 
-;; In your -main or dev namespace:
+;; Usage:
 ;;
-;;   (ig/init
-;;     (build-integrant-config instruction)
-;;     [:plug/http-server])
+;;   (def system (ig/init (build-integrant-config instruction)))
+;;   ;; => ;; [init] :component/sqlite {:dbtype "sqlite", :dbname "app.db"}
+;;   ;; => ;; [init] :component/jetty on port 2500
 ;;
-;; That's it. Commando builds the config. Integrant runs
-;; the system. Each library does what it does best.
+;;   (ig/halt! system)
+;;   ;; => ;; [halt] :component/jetty on port 2500
+;;   ;; => ;; [halt] :component/sqlite
+;;
+;; Commando builds the config. Integrant runs the system.
+;; Each library does what it does best.
