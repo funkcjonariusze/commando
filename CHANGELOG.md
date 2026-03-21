@@ -1,3 +1,19 @@
+# 1.1.1
+
+ADDED `commando.debug` namespace — new dedicated module for debug visualization. Provides two main entry points:
+- `execute-debug` — execute an instruction and visualize it in one of six display modes: `:tree`, `:table`, `:graph`, `:stats`, `:instr-before` / `:instr-after`. Supports combining multiple modes via a vector.
+- `execute-trace` — trace all nested `commando/execute` calls.
+
+REMOVED **BREAKING** `print-stats`, `print-trace` (`print-deep-stats`) from `commando.impl.utils`. These functions have been replaced by the richer `commando.debug` namespace.
+
+FIXED `crop-final-status-map` in `commando.core` — internal keys (`:internal/cm-list`, `:internal/cm-dependency`, `:internal/cm-running-order`, `:registry`) are now properly stripped from the result when `:debug-result` is not enabled.
+
+FIXED `execute-command-impl` in `commando.impl.executing` — added guard for non-map `command-data` before calling `dissoc` on driver keys (`:=>`, `"=>`), preventing errors when command data is a non-map value.
+
+UPDATED documentation — restructured `README.md` with improved navigation, added "Managing the Registry" and "Debugging" sections. Moved doc files from `doc/` to `examples/` directory with richer, runnable code examples: `walkthrough.clj`, `integrant.clj`, `json.clj`, `reitit.clj`, `reagent_front.cljs`.
+
+UPDATED tests — split monolithic `core_test.cljc` into focused test namespaces: `dependency_test.cljc`, `finding_commands_test.cljc`, `graph_test.cljc`. Added `debug_test.cljc` for the new debug module. Updated performance tests.
+
 # 1.1.0
 
 **BREAKING** REDESIGNED `:=` / `"="` with the new **Driver system** `:=>` / `"=>"`. The old keys are removed. Migration:

@@ -391,7 +391,7 @@
     (:instruction
      (commando/execute
        [command-fn-spec command-from-spec command-apply-spec]
-       {:= :dot-product
+       {:=> [:get :dot-product]
         :commando/apply
         {:vector1-str [\"1\" \"2\" \"3\"]
          :vector2-str [\"4\" \"5\" \"6\"]
@@ -420,7 +420,7 @@
     To solve this problem we can use `command-macro` to define reusable instruction template
 
     (defmethod command-macro :vector-dot-product [_macro-type {:keys [vector1-str vector2-str]}]
-      {:= :dot-product
+      {:=> [:get :dot-product]
        :commando/apply
        {:vector1-str vector1-str
         :vector2-str vector2-str

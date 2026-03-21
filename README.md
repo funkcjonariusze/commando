@@ -4,7 +4,7 @@
 
 [![Clojars Project](https://img.shields.io/clojars/v/org.clojars.funkcjonariusze/commando.svg)](https://clojars.org/org.clojars.funkcjonariusze/commando)
 [![Run tests](https://github.com/funkcjonariusze/commando/actions/workflows/unit_test.yml/badge.svg)](https://github.com/funkcjonariusze/commando/actions/workflows/unit_test.yml)
-[![cljdoc badge](https://cljdoc.org/badge/org.clojars.funkcjonariusze/commando)](https://cljdoc.org/d/org.clojars.funkcjonariusze/commando/1.1.0)
+[![cljdoc badge](https://cljdoc.org/badge/org.clojars.funkcjonariusze/commando)](https://cljdoc.org/d/org.clojars.funkcjonariusze/commando/1.1.1)
 
 **Commando** is a flexible Clojure library for managing, extracting, and transforming data inside nested map structures aimed to build your own Data DSL.
 
@@ -26,12 +26,13 @@
     - [Pipeline](#pipeline)
     - [Custom Drivers](#custom-drivers)
   - [Adding New Commands](#adding-new-commands)
+  - [Managing the Registry](#managing-the-registry)
+  - [Debugging](#debugging)
 - [Status-Map and Internals](#status-map-and-internals)
   - [Configuring Execution Behavior](#configuring-execution-behavior)
-    - [`:debug-result`](#debug-result)
-    - [`:error-data-string`](#error-data-string)
   - [Performance](#performance)
-- [Integrations](#integrations)
+- [Examples & Guides](#examples--guides)
+- [See Also](#see-also)
 - [Versioning](#versioning)
 - [License](#license)
 
@@ -39,10 +40,10 @@
 
 ```clojure
 ;; deps.edn with git
-{org.clojars.funkcjonariusze/commando {:mvn/version "1.1.0"}}
+{org.clojars.funkcjonariusze/commando {:mvn/version "1.1.1"}}
 
 ;; leiningen
-[org.clojars.funkcjonariusze/commando "1.1.0"]
+[org.clojars.funkcjonariusze/commando "1.1.1"]
 ```
 
 ## Quick Start
@@ -55,7 +56,7 @@
   [commands-builtin/command-from-spec]
   {"1" 1
    "2" {:commando/from ["1"]}
-   "3" {:commando/from ["2"]}}))
+   "3" {:commando/from ["2"]}})
 
 ;; RETURN =>
 ;;   {:instruction {"1" 1, "2" 1, "3" 1}
@@ -64,44 +65,106 @@
 ;;    :warnings []
 ;;    :successes [{:message "All commands executed successfully"}]}
 ```
+
+> **Hands-on intro** — open [`examples/walkthrough.clj`](./examples/walkthrough.clj) in your REPL and evaluate forms one by one to get a feel for the library.
+
 ## Concept
 
-The main idea of Commando is to create your own flexible, data-driven DSL. Commando enables you to describe complex data transformation and integration pipelines declaratively, tying together data sources, migrations, DTOs, and more.
+Commando turns a plain Clojure map into a small program:
 
-```clojure
-{"user-from-oracle-db" {:oracle/db :query-user :where [:= :session-id "SESSION-FSD123F1N1ASJ12UIVC"]}
- "inserting-info-about-user-in-mysql"
- {:mysql/db :add-some-user-action
-  :insert [{:action "open-app" :user {:commando/from ["user-from-oracle-db"] :=> [:get :login]}}
-		   {:action "query-insurense-data" :user {:commando/from ["user-from-oracle-db"] :=> [:get :login]}}
-		   ...]}}
+1. You write an **instruction** — a map where some values are **commands**
+2. Commando scans it, builds a dependency graph, and executes commands in the right order
+3. You get back the same map, but with commands replaced by their results
+
+```
+  ① Instruction (your data + commands)
+
+     {:price  100
+      :tax    10.2
+      :total  {:commando/fn +              ◄── "call (+ price tax-amount)"
+               :args [{:commando/from [:price]}
+                      {:commando/from [:tax]}]}}
+
+  ② Dependency graph (built automatically)
+
+     :price ──┐
+              ├──► :total
+     :tax   ──┘
+
+  ③ Result (commands replaced with values)
+
+     {:price  100
+      :tax    10.2
+      :total  110.2}
 ```
 
-In the above example, Commando combines queries to two different databases, enabling you to compose effective scripts, migrations, DTO structures, etc.
+The commands themselves are pluggable. Commando ships with a handful of built-in ones (`:commando/from`, `:commando/fn`, `:commando/apply`, ...), but the real power is that you define your own — any predicate that recognizes a pattern in data can become a command.
+
+This makes Commando a toolkit for building **domain-specific languages out of ordinary maps**: migration scripts, integration pipelines, configuration layers, form builders — anything where you want a declarative data structure that *does something*.
+
+### Real-World Examples
+
+The examples below use **custom commands** (see [Adding New Commands](#adding-new-commands)). Nothing here is built into Commando — it shows what a domain DSL can look like once you define your own command specs.
+
+**Database migration** — roles are created before users, because Commando resolves the dependency graph automatically:
 
 ```clojure
-{"roles"
- {"admin-role"
-  {:sql> "INSERT INTO permission-table(role,description) VALUES ((\"admin\", \"...\"))"
-   :sql< "SELECT id FROM permission-table WHERE role = \"admin\" "}
-  "service-role"
-  {:sql> "INSERT INTO permission-table(role,description) VALUES ((\"service\", \"...\"))"
-   :sql< "SELECT id FROM permission-table WHERE role = \"service\" "}
-  "user-role"
-  {:sql> "INSERT INTO permission-table(role,description) VALUES ((\"user\", \"...\"))"
-   :sql< "SELECT id FROM permission-table WHERE role = \"user\" "}}
- "users"
- [{:sql/insert-into :user-table
-   :record {:fname "Adam" :lname "West" :role {:commando/from ["roles" "admin-role"]}}}
-  {:sql/insert-into :user-table
-   :record {:fname "Bat" :lname "Man" :role {:commando/from ["roles" "admin-role"]}}}
-  ...]}
+(commando/execute
+  my-db-registry
+  {:roles
+   {:admin  {:sql/insert :permissions :name "admin"}
+    :viewer {:sql/insert :permissions :name "viewer"}}
+
+   :users
+   [{:sql/insert :users
+     :record {:name "Alice"
+              :role {:commando/from [:roles :admin] :=> [:get :id]}}}
+    {:sql/insert :users
+     :record {:name "Bob"
+              :role {:commando/from [:roles :viewer] :=> [:get :id]}}}]})
 ```
 
-The instruction above clearly explains the processes, and creates the required bindings which, when maintained, will help visualize and support your business logic.
+**Chained queries** — a tree of database queries where each depends on a previous result:
 
+```clojure
+(commando/execute
+  [db-query-spec builtin/command-from-spec]
+  {:user      {:db/query :users :where {:id 42}}
 
-As Commando is simply a graph-based resolver with easy configuration, it is not limited by any architectural constraints or specific framework.
+   :posts     {:db/query :posts
+               :where {:author-id {:commando/from [:user] :=> [:get :id]}}}
+
+   :comments  {:db/query :comments
+               :where {:post-ids {:commando/from [:posts] :=> [:fn #(mapv :id %)]}}}})
+;; => {:user {:id 42 :name "Alice" ...}
+;;     :posts [{:id 1 ...} {:id 2 ...}]
+;;     :comments [{:post-id 1 ...} {:post-id 2 ...} ...]}
+```
+
+**Design tokens / style map** — build a Reagent-friendly style system where component styles derive from shared tokens:
+
+```clojure
+(commando/execute
+  [builtin/command-from-spec
+   builtin/command-fn-spec]
+  {:tokens  {:primary "#3b82f6" :danger "#ef4444"
+             :radius "8px"      :space-sm "8px"}
+
+   :button  {:commando/fn merge
+             :args [{:background    {:commando/from [:tokens :primary]}}
+                    {:border-radius {:commando/from [:tokens :radius]}}
+                    {:padding       {:commando/from [:tokens :space-sm]}}]}
+
+   :alert   {:commando/fn merge
+             :args [{:background    {:commando/from [:tokens :danger]}}
+                    {:border-radius {:commando/from [:tokens :radius]}}
+                    {:padding       {:commando/from [:tokens :space-sm]}}]}})
+;; => {:tokens {...}
+;;     :button {:background "#3b82f6" :border-radius "8px" :padding "8px"}
+;;     :alert  {:background "#ef4444" :border-radius "8px" :padding "8px"}}
+```
+
+Commando is a graph-based resolver with easy configuration — it is not limited by any architectural constraints or specific framework.
 
 ## Basics
 
@@ -129,7 +192,7 @@ The above function composes "Instructions", "Commands", and a "CommandRegistry".
 
 ### Builtin Functionality
 
-The basic commands is found in namespace `commando.commands.builtin`. It describes core commands and their behaviors. Behavior of those commands declared with configuration map called _CommandMapSpecs_.
+The basic commands are found in namespace `commando.commands.builtin`. It describes core commands and their behaviors. Behavior of those commands declared with configuration map called _CommandMapSpecs_.
 
 #### command-from-spec
 
@@ -190,9 +253,9 @@ A convenient wrapper over `apply`.
    "v2" 2
    "sum="
    {:commando/fn +
-	:args [{:commando/from ["v1"]}
-		   {:commando/from ["v2"]}
-		   3]}})
+    :args [{:commando/from ["v1"]}
+           {:commando/from ["v2"]}
+           3]}})
 ;; => {"v1" 1 "v2" 2 "sum=" 6}
 ```
 
@@ -204,13 +267,13 @@ Returns the value of `:commando/apply` as-is. Use `:=>` driver to post-process t
 (commando/execute
   [commands-builtin/command-apply-spec]
   {"0" {:commando/apply
-		{"1" {:commando/apply
-			  {"2" {:commando/apply
-					{"3" {:commando/apply {"4" {:final "5"}}
-						  :=> [:get "4"]}}
-					:=> [:get "3"]}}
-			  :=> [:get "2"]}}
-		:=> [:get "1"]}})
+        {"1" {:commando/apply
+              {"2" {:commando/apply
+                    {"3" {:commando/apply {"4" {:final "5"}}
+                          :=> [:get "4"]}}
+                    :=> [:get "3"]}}
+              :=> [:get "2"]}}
+        :=> [:get "1"]}})
 ;; => {"0" {:final "5"}}
 ```
 
@@ -223,14 +286,14 @@ Imagine the following instruction is your initial database migration, adding use
   [commands-builtin/command-from-spec
    commands-builtin/command-mutation-spec]
   {"add-new-user-01" {:commando/mutation :add-user :name "Bob Anderson"
-					  :permissions [{:commando/from ["perm_send_mail"] :=> [:get :id]}
-					  {:commando/from ["perm_recv_mail"] :=> [:get :id]}]}
+                      :permissions [{:commando/from ["perm_send_mail"] :=> [:get :id]}
+                      {:commando/from ["perm_recv_mail"] :=> [:get :id]}]}
    "add-new-user-02" {:commando/mutation :add-user :name "Damian Nowak"
-					  :permissions [{:commando/from ["perm_recv_mail"] :=> [:get :id]}]}
+                      :permissions [{:commando/from ["perm_recv_mail"] :=> [:get :id]}]}
    "perm_recv_mail" {:commando/mutation :add-permission
-					 :name "receive-email-notification"}
+                     :name "receive-email-notification"}
    "perm_send_mail" {:commando/mutation :add-permission
-					 :name "send-email-notification"}})
+                     :name "send-email-notification"}})
 ```
 
 You can see that you need both :add-permission and :add-user commands. In most cases, such patterns can be abstracted and reused, simplifying your migrations and business logic.
@@ -257,7 +320,7 @@ This approach enables you to quickly encapsulate business logic into reusable co
 
 Allows describing reusable command templates that are expanded into regular Commando commands at runtime. This is useful when you want to describe a pattern for building a complex command or a set of related commands without duplicating the same structure throughout an instruction
 
-Asume we have a Instruction what calculates mean.
+Assume we have an instruction that calculates the mean.
 ```clojure
 (commando/execute
   [commands-builtin/command-from-spec
@@ -266,11 +329,11 @@ Asume we have a Instruction what calculates mean.
   {:=> [:get :result]
    :commando/apply
    {:vector-of-numbers [1, 2, 3, 4, 5]
-	:result
-	{:fn (fn [& [vector-of-numbers]]
-		   (/ (reduce + 0 vector-of-numbers)
-			 (count vector-of-numbers)))
-	 :args [{:commando/from [:commando/apply :vector-of-numbers]}]}}})
+    :result
+    {:fn (fn [& [vector-of-numbers]]
+           (/ (reduce + 0 vector-of-numbers)
+             (count vector-of-numbers)))
+     :args [{:commando/from [:commando/apply :vector-of-numbers]}]}}})
 ;; => 3
 ```
 
@@ -283,11 +346,11 @@ Define a macro
   {:=> [:get :result]
    :commando/apply
    {:vector-of-numbers vector-of-numbers
-	:result
-	{:fn (fn [& [vector-of-numbers]]
-		   (/ (reduce + 0 vector-of-numbers)
-			 (count vector-of-numbers)))
-	 :args [{:commando/from [:commando/apply :vector-of-numbers]}]}}})
+    :result
+    {:fn (fn [& [vector-of-numbers]]
+           (/ (reduce + 0 vector-of-numbers)
+             (count vector-of-numbers)))
+     :args [{:commando/from [:commando/apply :vector-of-numbers]}]}}})
 
 
 (commando/execute
@@ -356,7 +419,7 @@ A driver is declared via the `:=>` key (or `"=>"` for string-key/JSON maps) on a
 {:commando/.. :=> [[:get :address] [:get-in [:location :city]] :uppercase]}
 ```
 
-If no `:=>` is specified, the default driver is `:get-in` with no params, which acts as identity (pass-through).
+If no `:=>` is specified, the default driver is `:identity` (pass-through).
 
 ```clojure
 (commando/execute
@@ -527,7 +590,7 @@ Here's an example of another instruction, utilizing step-by-step extraction of k
    "a-value" {:commando/from ["1" :values :a] :=> [:fn (partial * 100)]}
    "b-value" {:commando/from ["1" :values :b] :=> [:fn (partial * -100)]}
    "args" {:a {:commando/from ["a-value"]}
-		   :b {:commando/from ["b-value"]}}
+           :b {:commando/from ["b-value"]}}
    "summ=" {:commando/from ["args"] :=> [:fn (fn [{:keys [a b]}] (+ a b))]}})
 ;; =>
 ;; {"1" {:values {:a 1, :b -1}},
@@ -545,11 +608,11 @@ Let's create a new command using a CommandMapSpec configuration map:
 {:type :CALC=
  :recognize-fn #(and (map? %) (contains? % :CALC=))
  :validate-params-fn (fn [m]
-					   (and
-						 (fn? (:CALC= m))
-						 (not-empty (:ARGS m))))
+                       (and
+                         (fn? (:CALC= m))
+                         (not-empty (:ARGS m))))
  :apply (fn [_instruction _command m]
-			 (apply (:CALC= m) (:ARGS m)))
+             (apply (:CALC= m) (:ARGS m)))
  :dependencies {:mode :all-inside}}
 ```
 
@@ -565,46 +628,30 @@ Let's create a new command using a CommandMapSpec configuration map:
 Now you can use it for more expressive operations like "summ=" and "multiply=" as shown below:
 
 ```clojure
-;; Build a registry — vector order defines scan priority
-(def command-registry
-  (commando/registry-create
-	[commands-builtin/command-from-spec
-	 {:type :CALC=
-	  :recognize-fn #(and (map? %) (contains? % :CALC=))
-	  :validate-params-fn (fn [m]
-							(and
-							  (fn? (:CALC= m))
-							  (not-empty (:ARGS m))))
-	  :apply (fn [_instruction _command m]
-				(apply (:CALC= m) (:ARGS m)))
-	  :dependencies {:mode :all-inside}}]))
-
-;; Modify a built registry
-(def extended-registry
-  (commando/registry-add command-registry
-    {:type :NEW-CMD
-     :recognize-fn #(and (map? %) (contains? % :NEW-CMD))
-     :apply (fn [_ _ m] (:NEW-CMD m))
-     :dependencies {:mode :none}}))
-
-(def shrunk-registry
-  (commando/registry-remove extended-registry :NEW-CMD))
-
 (commando/execute
-  command-registry
+  [commands-builtin/command-from-spec
+   {:type :CALC=
+    :recognize-fn #(and (map? %) (contains? % :CALC=))
+    :validate-params-fn (fn [m]
+                          (and
+                            (fn? (:CALC= m))
+                            (not-empty (:ARGS m))))
+    :apply (fn [_instruction _command m]
+              (apply (:CALC= m) (:ARGS m)))
+    :dependencies {:mode :all-inside}}]
   {"1" {:values {:a 1 :b -1}}
    "a-value" {:commando/from ["1" :values :a] :=> [:fn (partial * 100)]}
    "b-value" {:commando/from ["1" :values :b] :=> [:fn (partial * -100)]}
    "summ=" {:CALC= +
-			:ARGS [{:commando/from ["a-value"]}
-				   {:commando/from ["b-value"]}
-				   1
-				   11]}
+            :ARGS [{:commando/from ["a-value"]}
+                   {:commando/from ["b-value"]}
+                   1
+                   11]}
    "multiply=" {:CALC= *
-				:ARGS [{:commando/from ["a-value"]}
-					   {:commando/from ["b-value"]}
-					   2
-					   22]}})
+                :ARGS [{:commando/from ["a-value"]}
+                       {:commando/from ["b-value"]}
+                       2
+                       22]}})
 ;; =>
 ;; {"1" {:values {:a 1, :b -1}},
 ;;  "a-value" 100,
@@ -618,17 +665,76 @@ The concept of a **command** is not limited to map structures it is basically an
 ```clojure
 (commando/execute
   [{:type :custom/json
-	:recognize-fn #(and (string? %) (clojure.string/starts-with? % "json"))
-	:apply (fn [_instruction _command-map string-value]
-			  (clojure.data.json/read-str (apply str (drop 4 string-value))
-				:key-fn keyword))
-	:dependencies {:mode :none}}]
+    :recognize-fn #(and (string? %) (clojure.string/starts-with? % "json"))
+    :apply (fn [_instruction _command-map string-value]
+              (clojure.data.json/read-str (apply str (drop 4 string-value))
+                :key-fn keyword))
+    :dependencies {:mode :none}}]
   {:json-command-1 "json{\"some-json-value-1\": 123}"
    :json-command-2 "json{\"some-json-value-2\": [1, 2, 3]}"})
 ;; =>
 ;; {:json-command-1 {:some-json-value-1 123},
 ;;  :json-command-2 {:some-json-value-2 [1 2 3]}}
 ```
+
+### Managing the Registry
+
+You can pre-build a registry with `registry-create` and later modify it with `registry-add` / `registry-remove`:
+
+```clojure
+;; Build a registry — vector order defines scan priority
+(def command-registry
+  (commando/registry-create
+    [commands-builtin/command-from-spec
+     {:type :CALC=
+      :recognize-fn #(and (map? %) (contains? % :CALC=))
+      :apply (fn [_ _ m] (apply (:CALC= m) (:ARGS m)))
+      :dependencies {:mode :all-inside}}]))
+
+;; Add a new command spec to an existing registry
+(def extended-registry
+  (commando/registry-add command-registry
+    {:type :NEW-CMD
+     :recognize-fn #(and (map? %) (contains? % :NEW-CMD))
+     :apply (fn [_ _ m] (:NEW-CMD m))
+     :dependencies {:mode :none}}))
+
+;; Remove a command spec by type
+(def shrunk-registry
+  (commando/registry-remove extended-registry :NEW-CMD))
+```
+
+### Debugging
+
+The `commando.debug` namespace provides two main functions for inspecting instruction execution:
+
+**`execute-debug`**
+
+Executes an instruction with debug enabled and prints a visual representation. Accepts a display mode (default `:tree`):
+
+```clojure
+(require '[commando.debug :as debug])
+
+;; Default :table mode — shows data flow with values
+(debug/execute-debug registry instruction)
+
+;; Other modes: :table, :tree, :graph, :stats, :instr-before, :instr-after
+(debug/execute-debug registry instruction :table)
+
+;; Combine multiple modes in one printing
+(debug/execute-debug registry instruction [:instr-before :table :instr-after :stats])
+```
+
+**`execute-trace`**
+
+Traces all nested `commando/execute` calls (including recursive calls from macros/mutations) with timing. Wraps execution in a zero-argument function:
+
+```clojure
+(debug/execute-trace
+  #(commando/execute registry instruction))
+```
+
+Add `:__title` (or `"__title"`) to an instruction to label it in the trace output.
 
 
 ## Status-Map and Internals
@@ -720,6 +826,10 @@ The `commando.impl.utils/*execute-config*` dynamic variable allows for fine-grai
 
 - `:debug-result` (boolean)
 - `:error-data-string` (boolean)
+- `:hook-execute-start` (function) — called before execution begins, receives execution context map
+- `:hook-execute-end` (function) — called after execution completes, receives execution context map with `:stats` and `:instruction`
+
+Hooks allow you to observe or instrument the execution lifecycle — for example, to collect timing data, log nested executions, or build execution traces. See [Debugging](#debugging) for a practical use via `execute-trace`.
 
 #### `:debug-result`
 
@@ -734,10 +844,10 @@ Here's an example of how to use `:debug-result`:
 
 (binding [commando-utils/*execute-config* {:debug-result true}]
   (commando/execute
-	[commands-builtin/command-from-spec]
-	{"1" 1
-	 "2" {:commando/from ["1"]}
-	 "3" {:commando/from ["2"]}}))
+    [commands-builtin/command-from-spec]
+    {"1" 1
+     "2" {:commando/from ["1"]}
+     "3" {:commando/from ["2"]}}))
 
 ;; RETURN =>
 {:status :ok,
@@ -868,13 +978,22 @@ To test the limits of the library, we benchmarked it with instructions containin
 <img width="100%" src="./test/perf/commando/execute-steps(massive dep grow) secs_x_deps.png">
 </div>
 
-# Integrations
+# Examples & Guides
 
-- [Work with JSON](./doc/json.md)
-- [Frontend + Reagent](./doc/reagent.md)
-- [Commando + integrant](./doc/integrant.md)
-- [Commando QueryDSL](./doc/query_dsl.md)
-- [Example Http commando transit handler + Reitit](./doc/example_reitit.clj)
+- [Walkthrough](./examples/walkthrough.clj) — REPL-driven intro, evaluate forms one by one
+- [Work with JSON](./examples/json.clj) — sending instructions over the wire as JSON, keyword handling, string-keyed commands
+- [Frontend + Reagent](./examples/reagent_front.cljs) — using Commando with Reagent on the frontend
+- [Commando + Integrant](./examples/integrant.clj) — wiring Commando into an Integrant system
+- [Commando + Reitit](./examples/reitit.clj) — HTTP handler with Transit and Reitit
+- [Commando QueryDSL](./examples/query_dsl.md) — lightweight query mechanism as an alternative to GraphQL/Pathom
+
+# See Also
+
+Libraries that explore related ideas — graph-based resolution, declarative data pipelines, or reactive maps:
+
+- **[Pathom 3](https://pathom3.wsscode.com)** — attribute-based graph resolver. You declare how attributes derive from other attributes; Pathom plans and executes the minimal resolver graph to fulfill a query.
+- **[rmap](https://github.com/aroemers/rmap)** — reactive maps where values reference sibling keys, with dependencies resolved automatically — like a spreadsheet in a Clojure map.
+- **[Plumbing Graph](https://github.com/plumatic/plumbing)** — declarative DAG of named computations as `{keyword → fnk}`, compiled into an execution plan with automatic dependency resolution.
 
 # Versioning
 
