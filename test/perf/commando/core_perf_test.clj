@@ -4,6 +4,7 @@
    [commando.commands.builtin]
    [commando.commands.query-dsl]
    [commando.core]
+   [commando.debug :as debug]
    [commando.impl.utils :as commando-utils]))
 
 ;; =======================================
@@ -32,8 +33,10 @@
   `(let [results# (doall (for [_# (range ~n)]
                            ~@body))
          avg-stats# (calculate-average-stats results#)]
-     (print "Repeating instruction " ~n " times")
-     (commando-utils/print-stats avg-stats#)))
+     (println "Repeating instruction " ~n " times")
+     (#'debug/pprint-stats-mode
+       (assoc avg-stats# :status :ok :errors [] :internal/cm-running-order [])
+       nil)))
 
 (defn real-word-calculation-average-of-50 []
   (println "\n=====================Benchmark=====================")
@@ -102,13 +105,13 @@
           :employees {:commando/from [:employees]}
           :rates {:commando/from [:config :commission-rates]}}
          :=> [:fn (fn [{:keys [sales-totals employees rates]}]
-              (into {}
-                (map (fn [[emp-id total-sales]]
-                       (let [employee (get employees emp-id)
-                             rate-key (:level employee)
-                             commission-rate (get rates rate-key 0)]
-                         [emp-id (* total-sales commission-rate)]))
-                  sales-totals)))]}
+                    (into {}
+                      (map (fn [[emp-id total-sales]]
+                             (let [employee (get employees emp-id)
+                                   rate-key (:level employee)
+                                   commission-rate (get rates rate-key 0)]
+                               [emp-id (* total-sales commission-rate)]))
+                        sales-totals)))]}
 
         :employee-bonuses
         {:commando/apply
@@ -116,10 +119,10 @@
           :threshold {:commando/from [:config :bonus-threshold]}
           :bonus-amount {:commando/from [:config :performance-bonus]}}
          :=> [:fn (fn [{:keys [sales-totals threshold bonus-amount]}]
-              (into {}
-                (map (fn [[emp-id total-sales]]
-                       [emp-id (if (> total-sales threshold) bonus-amount 0)])
-                  sales-totals)))]}
+                    (into {}
+                      (map (fn [[emp-id total-sales]]
+                             [emp-id (if (> total-sales threshold) bonus-amount 0)])
+                        sales-totals)))]}
 
         :employee-total-compensation
         {:commando/fn (fn [commissions bonuses]
@@ -134,27 +137,27 @@
           :compensations {:commando/from [:calculations :employee-total-compensation]}
           :op-costs {:commando/from [:config :department-op-cost]}}
          :=> [:fn (fn [{:keys [employees sales-totals compensations op-costs]}]
-              (let [initial-agg {:sales {:total-revenue 0 :total-compensation 0}
-                                 :marketing {:total-revenue 0 :total-compensation 0}
-                                 :engineering {:total-revenue 0 :total-compensation 0}}]
-                (as-> (reduce-kv (fn [agg emp-id emp-data]
-                                   (let [dept (:department emp-data)
-                                         revenue (get sales-totals emp-id 0)
-                                         compensation (get compensations emp-id 0)]
-                                     (-> agg
-                                       (update-in [dept :total-revenue] + revenue)
-                                       (update-in [dept :total-compensation] + compensation))))
-                        initial-agg
-                        employees) data
-                  (merge-with
-                    (fn [dept-data op-cost]
-                      (let [profit (- (:total-revenue dept-data)
-                                     (+ (:total-compensation dept-data) op-cost))]
-                        (assoc dept-data
-                          :operating-cost op-cost
-                          :net-profit profit)))
-                    data
-                    op-costs))))]}}
+                    (let [initial-agg {:sales {:total-revenue 0 :total-compensation 0}
+                                       :marketing {:total-revenue 0 :total-compensation 0}
+                                       :engineering {:total-revenue 0 :total-compensation 0}}]
+                      (as-> (reduce-kv (fn [agg emp-id emp-data]
+                                         (let [dept (:department emp-data)
+                                               revenue (get sales-totals emp-id 0)
+                                               compensation (get compensations emp-id 0)]
+                                           (-> agg
+                                             (update-in [dept :total-revenue] + revenue)
+                                             (update-in [dept :total-compensation] + compensation))))
+                              initial-agg
+                              employees) data
+                        (merge-with
+                          (fn [dept-data op-cost]
+                            (let [profit (- (:total-revenue dept-data)
+                                           (+ (:total-compensation dept-data) op-cost))]
+                              (assoc dept-data
+                                :operating-cost op-cost
+                                :net-profit profit)))
+                          data
+                          op-costs))))]}}
 
        :final-report
        {:commando/apply
@@ -163,24 +166,24 @@
          :total-compensation-per-employee {:commando/from [:calculations :employee-total-compensation]}
          :tax-rate {:commando/from [:config :tax-rate]}}
         :=> [:fn (fn [{:keys [dept-financials total-sales-per-employee total-compensation-per-employee tax-rate]}]
-             (let [company-total-revenue (reduce + (map :total-revenue (vals dept-financials)))
-                   company-total-compensation (reduce + (map :total-compensation (vals dept-financials)))
-                   company-total-op-cost (reduce + (map :operating-cost (vals dept-financials)))
-                   company-gross-profit (- company-total-revenue
-                                          (+ company-total-compensation company-total-op-cost))
-                   taxes-payable (* company-gross-profit tax-rate)
-                   company-net-profit (- company-gross-profit taxes-payable)]
-               {:company-summary
-                {:total-revenue company-total-revenue
-                 :total-compensation company-total-compensation
-                 :total-operating-cost company-total-op-cost
-                 :gross-profit company-gross-profit
-                 :taxes-payable taxes-payable
-                 :net-profit-after-tax company-net-profit}
-                :department-breakdown dept-financials
-                :employee-performance
-                {:top-earner (key (apply max-key val total-compensation-per-employee))
-                 :top-seller (key (apply max-key val total-sales-per-employee))}}))]}}))
+                   (let [company-total-revenue (reduce + (map :total-revenue (vals dept-financials)))
+                         company-total-compensation (reduce + (map :total-compensation (vals dept-financials)))
+                         company-total-op-cost (reduce + (map :operating-cost (vals dept-financials)))
+                         company-gross-profit (- company-total-revenue
+                                                (+ company-total-compensation company-total-op-cost))
+                         taxes-payable (* company-gross-profit tax-rate)
+                         company-net-profit (- company-gross-profit taxes-payable)]
+                     {:company-summary
+                      {:total-revenue company-total-revenue
+                       :total-compensation company-total-compensation
+                       :total-operating-cost company-total-op-cost
+                       :gross-profit company-gross-profit
+                       :taxes-payable taxes-payable
+                       :net-profit-after-tax company-net-profit}
+                      :department-breakdown dept-financials
+                      :employee-performance
+                      {:top-earner (key (apply max-key val total-compensation-per-employee))
+                       :top-seller (key (apply max-key val total-sales-per-employee))}}))]}})))
 
 
 ;; ==============================
@@ -246,7 +249,7 @@
   (println "\n===================Benchmark=====================")
   (println "Run commando/execute in depth with using queryDSL")
   (println "=================================================")
-  (commando-utils/print-trace
+  (debug/execute-trace
     #(commando.core/execute
        [commando.commands.query-dsl/command-resolve-spec
         commando.commands.builtin/command-from-spec
@@ -376,7 +379,10 @@
                               (assoc "dependecy-token" dependecy-token))))
                      instruction-stats-result)]
     (doseq [{:keys [dependecy-token stats]} instruction-stats-result]
-      (commando-utils/print-stats {:stats stats} (str "Dependency Counts: " dependecy-token)))
+      (println (str "Dependency Counts: " dependecy-token))
+      (#'debug/pprint-stats-mode
+        {:stats stats :status :ok :errors [] :internal/cm-running-order []}
+        nil))
     (cljfreechart/save-chart-as-file
       (-> chart-data
         (cljfreechart/make-category-dataset {:group-key "dependecy-token"})
@@ -405,7 +411,10 @@
                                     (assoc "dependecy-token" dependecy-token))))
                      instruction-stats-result)]
     (doseq [{:keys [dependecy-token stats]} instruction-stats-result]
-      (commando-utils/print-stats {:stats stats} (str "Dependency Counts: " dependecy-token)))
+      (println (str "Dependency Counts: " dependecy-token))
+      (#'debug/pprint-stats-mode
+        {:stats stats :status :ok :errors [] :internal/cm-running-order []}
+        nil))
     (cljfreechart/save-chart-as-file
       (-> chart-data
         (cljfreechart/make-category-dataset {:group-key "dependecy-token"})
@@ -434,7 +443,10 @@
                               (assoc "dependecy-token" dependecy-token))))
                instruction-stats-result)]
     (doseq [{:keys [dependecy-token stats]} instruction-stats-result]
-      (commando-utils/print-stats {:stats stats} (str "Dependency Counts: " dependecy-token)))
+      (println (str "Dependency Counts: " dependecy-token))
+      (#'debug/pprint-stats-mode
+        {:stats stats :status :ok :errors [] :internal/cm-running-order []}
+        nil))
     (cljfreechart/save-chart-as-file
       (-> chart-data
         (cljfreechart/make-category-dataset {:group-key "dependecy-token"})
