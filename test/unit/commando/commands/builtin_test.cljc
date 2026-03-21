@@ -2,6 +2,7 @@
   (:require
    #?(:cljs [cljs.test :refer [deftest is testing]]
       :clj [clojure.test :refer [deftest is testing]])
+   [clojure.string]
    [commando.commands.builtin :as command-builtin]
    [commando.core             :as commando]
    [commando.impl.utils       :as commando-utils]
@@ -80,7 +81,17 @@
                               :=> [:fn (fn [e] (-> e :value inc))]}
               :result-with-deps {:commando/apply {:commando/from [:value]}
                                  :=> [:fn inc]}})))
-      "Uncorrectly processed :commando/apply")))
+      "Uncorrectly processed :commando/apply")
+    (is (= {"0" {:final "5"}}
+           (->> {"0" {:commando/apply {"1" {:commando/apply {"2" {:commando/apply {"3" {:commando/apply {"4" {:final
+                                                                                                              "5"}}
+                                                                                        :=> [:get "4"]}}
+                                                                  :=> [:get "3"]}}
+                                            :=> [:get "2"]}}
+                      :=> [:get "1"]}}
+                (commando/execute [command-builtin/command-apply-spec])
+                :instruction))
+        "Nested apply: commands inside commands are executed correctly")))
 
 ;; ===========================
 ;; FROM-SPEC
@@ -285,7 +296,19 @@
                :value {:commando/from "BROKEN"}
                :reason {:commando/from ["commando/from should be a sequence path to value in Instruction: [:some 2 \"value\"]"]}})))
       "Waiting on error, ':validate-params-fn' for commando/from. Corrupted path \"BROKEN\" ")
-))
+  (testing ":point dependency lookup in set/list cause a failure"
+    (is (commando/ok? (commando/execute [command-builtin/command-from-spec]
+                        {"map" {:a 1 :b 2} "=" {:commando/from ["map" :a]}}))
+        "Map lookup succeeds")
+    (is (= 1 (get-in (commando/execute [command-builtin/command-from-spec]
+                        {"vector" [1 2 3] "=" {:commando/from ["vector" 0]}})
+                      [:instruction "="])))
+    (is (commando/failed? (commando/execute [command-builtin/command-from-spec]
+                            {"set" #{1 2 3} "=" {:commando/from ["set" 0]}}))
+        "Set lookup fails")
+    (is (commando/failed? (commando/execute [command-builtin/command-from-spec]
+                            {"list" (list 1 2 3) "=" {:commando/from ["list" 0]}}))
+        "List lookup fails"))))
 
 ;; ===========================
 ;; CONTEXT-SPEC
@@ -574,3 +597,18 @@
              :reason {:commando/macro ["should be a keyword" "should be a string"]},
              :path []})))
       "Waiting on error, bacause commando/mutation has wrong type for :commando/mutation")))
+
+;; ===========================
+;; NON-MAP COMMAND DATA
+;; ===========================
+
+(deftest non-map-command-data
+  (testing "String-based recognize-fn (command data is not a map)"
+    (let [bang-spec {:type         :bang
+                     :recognize-fn #(and (string? %) (clojure.string/ends-with? % "!"))
+                     :apply        (fn [_ _ s] (clojure.string/upper-case s))
+                     :dependencies {:mode :none}}
+          result   (commando/execute [bang-spec] {:calm "hello" :excited "hello!"})]
+      (is (commando/ok? result) "Non-map command executes without error")
+      (is (= "hello" (get-in (:instruction result) [:calm])) "Non-command values unchanged")
+      (is (= "HELLO!" (get-in (:instruction result) [:excited])) "String command applied correctly"))))

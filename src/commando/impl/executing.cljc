@@ -60,7 +60,9 @@
         command-path          (cm/command-path command-path-obj)
         root?                 (empty? command-path)
         command-data          (if root? instruction (get-in instruction command-path))
-        applied-result        (apply-fn instruction command-path-obj (dissoc command-data :=> "=>"))
+        applied-result        (apply-fn instruction command-path-obj (if (map? command-data)
+                                                                         (dissoc command-data :=> "=>")
+                                                                         command-data))
         [drv-name drv-params] (resolve-command-driver command-data command-spec)
         result                (command-driver
                                 drv-name drv-params applied-result

@@ -146,10 +146,13 @@
       (update :registry registry/reset-runtime-registry))))
 
 (defn ^:private crop-final-status-map [status-map]
-  (let [debug? (:debug-result (utils/execute-config))]
-   (cond-> status-map
-     (false? debug?) (dissoc :internal/cm-running-order)
-     (false? debug?) (dissoc :registry))))
+  (if (:debug-result (utils/execute-config))
+    status-map
+    (dissoc status-map
+            :internal/cm-list
+            :internal/cm-dependency
+            :internal/cm-running-order
+            :registry)))
 
 ;; -- Execute --
 
@@ -167,7 +170,8 @@
         (prepare-execution-status-map)
         (execute-commands!)
         (smap/status-map-add-measurement "execute" start-time (utils/now))
-        (utils/hook-process (:hook-execute-end (utils/execute-config)))))))
+        (utils/hook-process (:hook-execute-end (utils/execute-config)))
+        (crop-final-status-map)))))
 
 (defn failed? [status-map] (smap/failed? status-map))
 (defn ok? [status-map] (smap/ok? status-map))
