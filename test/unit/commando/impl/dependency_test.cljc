@@ -2,10 +2,11 @@
   (:require
    #?(:cljs [cljs.test :refer [deftest is testing]]
       :clj [clojure.test :refer [deftest is testing]])
-   [commando.commands.builtin :as cmds-builtin]
-   [commando.core             :as commando]
-   [commando.impl.command-map :as cm]
-   [commando.impl.registry    :as commando-registry]))
+   [commando.commands.builtin  :as cmds-builtin]
+   [commando.core              :as commando]
+   [commando.impl.command-map  :as cm]
+   [commando.impl.pathtrie     :as pathtrie]
+   [commando.impl.registry     :as commando-registry]))
 
 (def test-add-id-command
   {:type :test/add-id
@@ -44,62 +45,73 @@
 
 ;; -- Status maps --
 
+(defn- status-map-with-trie [m]
+  (assoc m :internal/path-trie (pathtrie/build-path-trie (:internal/cm-list m))))
+
 (def failed-status-map
-  {:status :failed
-   :instruction {}
-   :registry registry
-   :internal/cm-list []})
+  (status-map-with-trie
+    {:status :failed
+     :instruction {}
+     :registry registry
+     :internal/cm-list []}))
 
 (def empty-ok-status-map
-  {:status :ok
-   :instruction {:a 1}
-   :registry registry
-   :internal/cm-list []})
+  (status-map-with-trie
+    {:status :ok
+     :instruction {:a 1}
+     :registry registry
+     :internal/cm-list []}))
 
 (def all-inside-status-map
-  {:status :ok
-   :instruction {:parent {:test/add-id :fn
-                          :child {:test/add-id :fn}}}
-   :registry registry
-   :internal/cm-list [parent-cmd child-cmd]})
+  (status-map-with-trie
+    {:status :ok
+     :instruction {:parent {:test/add-id :fn
+                            :child {:test/add-id :fn}}}
+     :registry registry
+     :internal/cm-list [parent-cmd child-cmd]}))
 
 (def point-deps-status-map
-  {:status :ok
-   :instruction {:target {:test/add-id :fn}
-                 :ref {:commando/from [:target]}}
-   :registry registry
-   :internal/cm-list [target-cmd ref-cmd]})
+  (status-map-with-trie
+    {:status :ok
+     :instruction {:target {:test/add-id :fn}
+                   :ref {:commando/from [:target]}}
+     :registry registry
+     :internal/cm-list [target-cmd ref-cmd]}))
 
 (def chained-deps-map
-  {:status :ok
-   :instruction {:a {:commando/from [:b]}
-                 :b {:commando/from [:c]}
-                 :c {:test/add-id :fn}}
-   :registry registry
-   :internal/cm-list [chain-cmd-a chain-cmd-b chain-cmd-c]})
+  (status-map-with-trie
+    {:status :ok
+     :instruction {:a {:commando/from [:b]}
+                   :b {:commando/from [:c]}
+                   :c {:test/add-id :fn}}
+     :registry registry
+     :internal/cm-list [chain-cmd-a chain-cmd-b chain-cmd-c]}))
 
 (def diamond-deps-map
-  {:status :ok
-   :instruction {:a {:commando/from [:b]}
-                 :b {:commando/from [:d]}
-                 :c {:commando/from [:d]}
-                 :d {:test/add-id :fn}}
-   :registry registry
-   :internal/cm-list [diamond-cmd-a diamond-cmd-b diamond-cmd-c diamond-cmd-d]})
+  (status-map-with-trie
+    {:status :ok
+     :instruction {:a {:commando/from [:b]}
+                   :b {:commando/from [:d]}
+                   :c {:commando/from [:d]}
+                   :d {:test/add-id :fn}}
+     :registry registry
+     :internal/cm-list [diamond-cmd-a diamond-cmd-b diamond-cmd-c diamond-cmd-d]}))
 
 (def deep-cross-ref-map
-  {:status :ok
-   :instruction {:deep {:nested {:cmd {:commando/from [:target]}}}
-                 :target {:test/add-id :fn}}
-   :registry registry
-   :internal/cm-list [deep-shallow shallow-target]})
+  (status-map-with-trie
+    {:status :ok
+     :instruction {:deep {:nested {:cmd {:commando/from [:target]}}}
+                   :target {:test/add-id :fn}}
+     :registry registry
+     :internal/cm-list [deep-shallow shallow-target]}))
 
 (def sibling-deps-map
-  {:status :ok
-   :instruction {:container {:sib1 {:commando/from [:container :sib2]}
-                             :sib2 {:test/add-id :fn}}}
-   :registry registry
-   :internal/cm-list [sibling1 sibling2]})
+  (status-map-with-trie
+    {:status :ok
+     :instruction {:container {:sib1 {:commando/from [:container :sib2]}
+                               :sib2 {:test/add-id :fn}}}
+     :registry registry
+     :internal/cm-list [sibling1 sibling2]}))
 
 (defn cmd-by-path [path commands] (first (filter #(= (cm/command-path %) path) commands)))
 
@@ -142,10 +154,10 @@
                       :cache {:commando/from [:products :load]}}
            :orders {:create {:commando/from [:users :validate]}
                     :prepare {:commando/from [:products :cache]}}}
-          cmds (:internal/cm-list (#'commando/find-commands
-                                    {:status :ok :instruction large-instruction :registry registry}))
-          result (#'commando/build-deps-tree
-                   {:status :ok :instruction large-instruction :registry registry :internal/cm-list cmds})
+          found (#'commando/find-commands
+                  {:status :ok :instruction large-instruction :registry registry})
+          cmds (:internal/cm-list found)
+          result (#'commando/build-deps-tree found)
           deps (:internal/cm-dependency result)]
       (is (commando/ok? result) "Successfully processes large dependency tree")
       (is (contains? (get deps (cmd-by-path [:users :fetch] cmds)) (cmd-by-path [:config :database] cmds))
@@ -158,7 +170,8 @@
           "orders.prepare depends on products.cache")))
   (testing "Empty command list"
     (let [result (#'commando/build-deps-tree
-                   {:status :ok :instruction {} :registry registry :internal/cm-list []})]
+                   (status-map-with-trie
+                     {:status :ok :instruction {} :registry registry :internal/cm-list []}))]
       (is (commando/ok? result) "Handles empty command list")
       (is (empty? (:internal/cm-dependency result)) "Dependency map is empty"))))
 
@@ -166,11 +179,12 @@
   (testing ":all-inside mode"
     (let [goal2-cmd (cm/->CommandMapPath [:goal-2] test-add-id-command)
           goal2-someval-cmd (cm/->CommandMapPath [:goal-2 :some-val] test-add-id-command)
-          test-status-map {:status :ok
-                           :instruction {:goal-2 {:test/add-id :fn
-                                                  :some-val {:test/add-id :nested}}}
-                           :registry registry
-                           :internal/cm-list [goal2-cmd goal2-someval-cmd]}
+          test-status-map (status-map-with-trie
+                            {:status :ok
+                             :instruction {:goal-2 {:test/add-id :fn
+                                                    :some-val {:test/add-id :nested}}}
+                             :registry registry
+                             :internal/cm-list [goal2-cmd goal2-someval-cmd]})
           result (#'commando/build-deps-tree test-status-map)
           deps (:internal/cm-dependency result)]
       (is (commando/ok? result) "Successfully processes :all-inside dependency")
@@ -179,11 +193,12 @@
   (testing ":point mode"
     (let [goal1-cmd (cm/->CommandMapPath [:goal-1] test-add-id-command)
           ref-cmd (cm/->CommandMapPath [:ref] cmds-builtin/command-from-spec)
-          test-status-map {:status :ok
-                           :instruction {:goal-1 {:test/add-id :fn}
-                                         :ref {:commando/from [:goal-1]}}
-                           :registry registry
-                           :internal/cm-list [goal1-cmd ref-cmd]}
+          test-status-map (status-map-with-trie
+                            {:status :ok
+                             :instruction {:goal-1 {:test/add-id :fn}
+                                           :ref {:commando/from [:goal-1]}}
+                             :registry registry
+                             :internal/cm-list [goal1-cmd ref-cmd]})
           result (#'commando/build-deps-tree test-status-map)
           deps (:internal/cm-dependency result)]
       (is (commando/ok? result) "Successfully processes :point dependency")
@@ -195,10 +210,11 @@
                         :apply identity
                         :dependencies {:mode :none}}
           none-cmd (cm/->CommandMapPath [:standalone] none-command)
-          test-status-map {:status :ok
-                           :instruction {:standalone {:test/none :independent}}
-                           :registry (commando/registry-create [none-command])
-                           :internal/cm-list [none-cmd]}
+          test-status-map (status-map-with-trie
+                            {:status :ok
+                             :instruction {:standalone {:test/none :independent}}
+                             :registry (commando/registry-create [none-command])
+                             :internal/cm-list [none-cmd]})
           result (#'commando/build-deps-tree test-status-map)
           deps (:internal/cm-dependency result)]
       (is (commando/ok? result) "Successfully processes :none dependency")

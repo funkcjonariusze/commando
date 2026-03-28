@@ -5,7 +5,6 @@
    [clojure.string]
    [commando.commands.builtin :as command-builtin]
    [commando.core             :as commando]
-   [commando.impl.utils       :as commando-utils]
    [malli.core                :as malli]
    [commando.test-helpers     :as helpers]))
 
@@ -32,12 +31,10 @@
   (testing "Failure test cases"
     (is
       (helpers/status-map-contains-error?
-        (binding [commando-utils/*execute-config*
-                  {:debug-result false
-                   :error-data-string false}]
-          (commando/execute [command-builtin/command-fn-spec]
+        (commando/execute [command-builtin/command-fn-spec]
             {:commando/fn "STRING"
-             :args [[1 2 3] [3 2 1]]}))
+             :args [[1 2 3] [3 2 1]]}
+            {:error-data-string false})
         (fn [error]
           (=
             (-> error :error :data)
@@ -51,12 +48,10 @@
       "Waiting on error, bacause commando/fn has wrong type for :commando/fn")
     (is
       (helpers/status-map-contains-error?
-        (binding [commando-utils/*execute-config*
-                  {:debug-result false
-                   :error-data-string false}]
-          (commando/execute [command-builtin/command-fn-spec]
+        (commando/execute [command-builtin/command-fn-spec]
             {:commando/fn (fn [& [v1 v2]] (reduce + (map * v1 v2)))
-             :args "BROKEN"}))
+             :args "BROKEN"}
+            {:error-data-string false})
         (fn [error]
           (=
             (-> error :error :data (dissoc :value))
@@ -228,9 +223,9 @@
   (testing "Failure test cases"
     (is
       (helpers/status-map-contains-error?
-        (binding [commando-utils/*execute-config* {:error-data-string false}]
-          (commando/execute [command-builtin/command-from-spec]
-            {:ref {:commando/from ["@nonexistent" :value]}}))
+        (commando/execute [command-builtin/command-from-spec]
+            {:ref {:commando/from ["@nonexistent" :value]}}
+            {:error-data-string false})
         (fn [error]
           (=
             (get-in error [:error :data])
@@ -240,10 +235,10 @@
       "Anchor not found: should produce error with :anchor key in data")
     (is
       (helpers/status-map-contains-error?
-        (binding [commando-utils/*execute-config* {:error-data-string false}]
-          (commando/execute [command-builtin/command-from-spec]
+        (commando/execute [command-builtin/command-from-spec]
             {"source" {:a 1 :b 2}
-             "missing" {:commando/from ["UNEXISING"]}}))
+             "missing" {:commando/from ["UNEXISING"]}}
+            {:error-data-string false})
         (fn [error]
           (=
             (get-in error [:error :data])
@@ -253,10 +248,10 @@
       "Waiting on error, bacause commando/from seding to unexising path")
     (is
       (helpers/status-map-contains-error?
-        (binding [commando-utils/*execute-config* {:error-data-string false}]
-          (commando/execute [command-builtin/command-from-spec]
+        (commando/execute [command-builtin/command-from-spec]
             {"source" {:a 1 :b 2}
-             "missing" {"commando-from" ["UNEXISING"]}}))
+             "missing" {"commando-from" ["UNEXISING"]}}
+            {:error-data-string false})
         (fn [error]
           (=
             (get-in error [:error :data])
@@ -266,13 +261,11 @@
       "Waiting on error, bacause \"commando-from\" seding to unexising path")
     (is
       (helpers/status-map-contains-error?
-        (binding [commando-utils/*execute-config*
-                  {:debug-result false
-                   :error-data-string false}]
-          (commando/execute [command-builtin/command-from-spec]
+        (commando/execute [command-builtin/command-from-spec]
             {"value" 1
              "result" {:commando/from ["value"]
-                       "commando-from" ["value"]}}))
+                       "commando-from" ["value"]}}
+            {:error-data-string false})
         (fn [error]
           (=
             (-> error :error :data)
@@ -282,12 +275,10 @@
              :value {:commando/from ["value"], "commando-from" ["value"]}})))
       "Using string and keyword form shouldn't be allowed")
     (is (helpers/status-map-contains-error?
-          (binding [commando-utils/*execute-config*
-                    {:debug-result false
-                     :error-data-string false}]
-            (commando/execute
+          (commando/execute
               [command-builtin/command-from-spec]
-              {:commando/from "BROKEN"}))
+              {:commando/from "BROKEN"}
+              {:error-data-string false})
           (fn [error]
             (=
               (-> error :error :data)
@@ -355,10 +346,9 @@
           "String keys test")))
     (testing "Failure test cases"
       (is (helpers/status-map-contains-error?
-            (binding [commando-utils/*execute-config*
-                      {:debug-result false :error-data-string false}]
-              (commando/execute [ctx-spec]
-                {:val {:commando/context "NOT-A-PATH"}}))
+            (commando/execute [ctx-spec]
+                {:val {:commando/context "NOT-A-PATH"}}
+                {:error-data-string false})
             (fn [error]
               (= (-> error :error :data)
                 {:command-type :commando/context
@@ -367,10 +357,9 @@
                  :value {:commando/context "NOT-A-PATH"}})))
         "Should fail validation when path is not sequential")
       (is (helpers/status-map-contains-error?
-            (binding [commando-utils/*execute-config*
-                      {:debug-result false :error-data-string false}]
-              (commando/execute [ctx-spec]
-                {:val {:commando/context [:colors] "commando-context" ["colors"]}}))
+            (commando/execute [ctx-spec]
+                {:val {:commando/context [:colors] "commando-context" ["colors"]}}
+                {:error-data-string false})
             (fn [error]
               (= (-> error :error :data)
                 {:command-type :commando/context
@@ -427,14 +416,12 @@
   (testing "Failure test cases"
     (is
       (helpers/status-map-contains-error?
-        (binding [commando-utils/*execute-config*
-                  {:debug-result false
-                   :error-data-string false}]
-          (commando/execute [command-builtin/command-mutation-spec]
+        (commando/execute [command-builtin/command-mutation-spec]
             {:commando/mutation :dot-product
              "commando-mutation" "dot-product"
              "vector1" [1 2 3]
-             "vector2" [3 2 1]}))
+             "vector2" [3 2 1]}
+            {:error-data-string false})
         (fn [error]
           (=
             (-> error :error :data)
@@ -449,11 +436,9 @@
       "Using string and keyword form shouldn't be allowed")
     (is
       (helpers/status-map-contains-error?
-        (binding [commando-utils/*execute-config*
-                  {:debug-result false
-                   :error-data-string false}]
-          (commando/execute [command-builtin/command-mutation-spec]
-            {:commando/mutation (fn [] "BROKEN")}))
+        (commando/execute [command-builtin/command-mutation-spec]
+            {:commando/mutation (fn [] "BROKEN")}
+            {:error-data-string false})
         (fn [error]
           (=
             (-> error :error :data (dissoc :value))
@@ -463,13 +448,11 @@
       "Waiting on error, bacause commando/mutation has wrong type for :commando/mutation")
     (is
       (helpers/status-map-contains-error?
-        (binding [commando-utils/*execute-config*
-                  {:debug-result false
-                   :error-data-string false}]
-          (commando/execute [command-builtin/command-mutation-spec]
+        (commando/execute [command-builtin/command-mutation-spec]
             {:commando/mutation :dot-product
              :vector1 [1 "_" 3]
-             :vector2 [3 2 1]}))
+             :vector2 [3 2 1]}
+            {:error-data-string false})
         (fn [error]
           (=
             (-> error :error (helpers/remove-stacktrace) (dissoc :data))
@@ -559,10 +542,7 @@
   (testing "Failure test cases"
     (is
       (helpers/status-map-contains-error?
-        (binding [commando-utils/*execute-config*
-                  {:debug-result false
-                   :error-data-string false}]
-          (commando/execute
+        (commando/execute
             [command-builtin/command-macro-spec
              command-builtin/command-fn-spec
              command-builtin/command-from-spec
@@ -570,7 +550,8 @@
             {:commando/macro :string-vectors-dot-product
              "commando-macro" "string-vectors-dot-product"
              "vector1-str" ["1" "2" "3"]
-             "vector2-str" ["4" "5" "6"]}))
+             "vector2-str" ["4" "5" "6"]}
+            {:error-data-string false})
         (fn [error]
           (=
             (-> error :error :data)
@@ -585,11 +566,9 @@
       "Using string and keyword form shouldn't be allowed")
     (is
       (helpers/status-map-contains-error?
-        (binding [commando-utils/*execute-config*
-                  {:debug-result false
-                   :error-data-string false}]
-          (commando/execute [command-builtin/command-macro-spec]
-            {:commando/macro (fn [])}))
+        (commando/execute [command-builtin/command-macro-spec]
+            {:commando/macro (fn [])}
+            {:error-data-string false})
         (fn [error]
           (=
             (-> error :error :data (dissoc :value))
@@ -604,10 +583,10 @@
 
 (deftest non-map-command-data
   (testing "String-based recognize-fn (command data is not a map)"
-    (let [bang-spec {:type         :bang
-                     :recognize-fn #(and (string? %) (clojure.string/ends-with? % "!"))
-                     :apply        (fn [_ _ s] (clojure.string/upper-case s))
-                     :dependencies {:mode :none}}
+    (let [bang-spec {:type           :bang
+                     :recognize-fn   #(and (string? %) (clojure.string/ends-with? % "!"))
+                     :apply          (fn [_ _ s] (clojure.string/upper-case s))
+                     :dependencies   {:mode :none}}
           result   (commando/execute [bang-spec] {:calm "hello" :excited "hello!"})]
       (is (commando/ok? result) "Non-map command executes without error")
       (is (= "hello" (get-in (:instruction result) [:calm])) "Non-command values unchanged")

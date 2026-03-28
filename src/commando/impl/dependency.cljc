@@ -4,22 +4,6 @@
    [commando.impl.command-map :as cm]
    [commando.impl.utils       :as utils]))
 
-(defn- build-path-trie
-  "Builds a trie from a list of CommandMapPath objects for efficient path-based lookups."
-  [cm-list]
-  (reduce
-    (fn [trie cmd]
-      (assoc-in trie (conj (cm/command-path cmd) ::command) cmd))
-    {}
-    cm-list))
-
-(defn- get-all-nested-commands
-  "Lazily traverses a trie.
-   Returns a lazy sequence of all command objects found."
-  [trie]
-  (->> (tree-seq map? (fn [node] (vals (dissoc node ::command))) trie)
-       (keep ::command)))
-
 (defmulti find-command-dependencies
   "Finds command dependencies based on dependency-type.
 
@@ -28,38 +12,40 @@
   Modes:
   - :all-inside - depends on all commands inside the Command:
      if it Map - the values, if it Vector - elements of vectors
-  - :all-inside-recur - depends on all commands nested within this command's path
   - :point - depends on command(s) at a specific path, defined by :point-key
       setting key. :point collect only one depedency - the only one it refering.
-  - :point-and-all-inside-recur - joined approach of :point and :all-inside-recur.
-      collect dependencies for path it pointing along with nested dependecies under
-      the pointed item. First tries to find a command at the exact target path. If not found,
-      walks up the path hierarchy to find parent commands that will create/modify
-      the target path.
   - :none - no dependencies (not implemented, returns empty set by default)"
   (fn [_command-path-obj _instruction _path-trie dependency-type] dependency-type))
+
+;; -- Default --
 
 (defmethod find-command-dependencies :default
   [_command-path-obj _instruction _path-trie type]
   (throw (ex-info (str utils/exception-message-header "Undefined dependency mode: " type)
-                  {:message (str utils/exception-message-header "Undefined dependency mode: " type)
-                   :dependency-mode type})))
+           {:message (str utils/exception-message-header "Undefined dependency mode: " type)
+            :dependency-mode type})))
+
+;; -- None --
+
+(defmethod find-command-dependencies :none [_command-path-obj _instruction _path-trie _type] #{})
+
+;; -- All Inside --
 
 (defmethod find-command-dependencies :all-inside
   [command-path-obj _instruction path-trie _type]
+  ;; Direct reduce-kv instead of dissoc+vals+keep+set chain.
+  ;; Avoids: 1 dissoc (new map), 1 vals (lazy seq), 1 keep (lazy seq), 1 set (materialization).
   (let [command-path (cm/command-path command-path-obj)
         sub-trie (get-in path-trie command-path)]
-    (->> (vals (dissoc sub-trie ::command))
-         (keep ::command)
-         set)))
+    (reduce-kv (fn [acc k v]
+                 (if (identical? k :commando.impl.pathtrie/command)
+                   acc
+                   (if-let [cmd (:commando.impl.pathtrie/command v)]
+                     (conj acc cmd)
+                     acc)))
+      #{} sub-trie)))
 
-(defmethod find-command-dependencies :all-inside-recur
-  [command-path-obj _instruction path-trie _type]
-  (let [command-path (cm/command-path command-path-obj)
-        sub-trie (get-in path-trie command-path)]
-    (->> (get-all-nested-commands sub-trie)
-         (remove #(= % command-path-obj))
-         set)))
+;; -- Point --
 
 (defn- find-anchor-path
   "Walks UP from current-path looking for the nearest ancestor map
@@ -69,8 +55,8 @@
   (loop [path (vec current-path)]
     (let [node (get-in instruction path)]
       (if (and (map? node)
-               (= anchor-name (or (get node "__anchor")
-                                  (get node :__anchor))))
+            (= anchor-name (or (get node "__anchor")
+                             (get node :__anchor))))
         path
         (when (seq path)
           (recur (pop path)))))))
@@ -86,34 +72,30 @@
                     (requires instruction to be passed as first argument)
     any other      - descend into that key"
   [instruction base-path segments]
-  (let [result
-        (reduce
-          (fn [acc segment]
-            (let [{:keys [relative path]} acc
-                  current-base (or relative base-path)]
-              (cond
-                (= segment "../")
-                {:relative (vec (butlast current-base)) :path path}
+  (loop [remaining (seq segments)
+         relative nil
+         path []]
+    (if-not remaining
+      (if relative (into relative path) path)
+      (let [segment (first remaining)
+            current-base (or relative base-path)]
+        (cond
+          (= segment "../")
+          (recur (next remaining) (vec (butlast current-base)) path)
 
-                (= segment "./")
-                {:relative (vec current-base) :path path}
+          (= segment "./")
+          (recur (next remaining) (vec current-base) path)
 
-                (and instruction
-                  (string? segment)
-                  (str/starts-with? segment "@"))
-                (let [anchor-name (subs segment 1)
-                      anchor-path (find-anchor-path instruction (butlast current-base) anchor-name)]
-                  (if anchor-path
-                    {:relative anchor-path :path path}
-                    (reduced nil)))
+          (and instruction
+            (string? segment)
+            (str/starts-with? segment "@"))
+          (let [anchor-name (subs segment 1)
+                anchor-path (find-anchor-path instruction (butlast current-base) anchor-name)]
+            (when anchor-path
+              (recur (next remaining) anchor-path path)))
 
-                :else
-                {:relative relative :path (conj path segment)})))
-          {:relative nil :path []}
-          segments)]
-    (when result
-      (let [{:keys [relative path]} result]
-        (if relative (vec (concat relative path)) (vec path))))))
+          :else
+          (recur (next remaining) relative (conj path segment)))))))
 
 (defn path-exists-in-instruction?
   "Checks if a path exists in the instruction map."
@@ -156,43 +138,21 @@
 (defmethod find-command-dependencies :point
   [command-path-obj instruction path-trie _type]
   (let [target-path (point-target-path instruction command-path-obj)]
-    (if-let [point-command (get-in path-trie (conj target-path ::command))]
+    (if-let [point-command (get-in path-trie (conj target-path :commando.impl.pathtrie/command))]
       #{point-command}
       (throw-point-error command-path-obj target-path instruction))))
 
-(defn- point-find-parent-command
-  "Walks up the path hierarchy to find the first parent command that exists in the trie."
-  [path-trie target-path]
-  (loop [current-path target-path]
-    (when (seq current-path)
-      (if-let [cmd (get-in path-trie (conj current-path ::command))]
-        cmd
-        (recur (butlast current-path))))))
-
-(defmethod find-command-dependencies :point-and-all-inside-recur
-  [command-path-obj instruction path-trie _type]
-  (let [target-path (point-target-path instruction command-path-obj)
-        sub-trie (get-in path-trie target-path)
-        commands-at-target (set (get-all-nested-commands sub-trie))
-        parent-command (point-find-parent-command path-trie target-path)]
-    (cond
-      (not-empty commands-at-target) commands-at-target
-      parent-command #{parent-command}
-      (path-exists-in-instruction? instruction target-path) #{}
-      :else (throw-point-error command-path-obj target-path instruction))))
-
-(defmethod find-command-dependencies :none [_command-path-obj _instruction _path-trie _type] #{})
+;; Dependency
 
 (defn build-dependency-graph
-  "Builds the dependency map for all commands in `cm-list`.
-   Returns a map from CommandMapPath objects to their dependency sets."
-  [instruction cm-list]
-  (let [path-trie (build-path-trie cm-list)]
-    (reduce (fn [dependency-acc command-path-obj]
-              (let [dependency-mode (get-in (cm/command-data command-path-obj) [:dependencies :mode])]
-                (assoc dependency-acc
-                  command-path-obj
-                  (find-command-dependencies command-path-obj instruction path-trie dependency-mode))))
-            {}
-            cm-list)))
+  "Builds forward dependency graph using a pre-built path-trie.
+   Returns {CommandMapPath -> #{deps}}."
+  [instruction cm-list path-trie]
+  (persistent!
+    (reduce (fn [fwd command-path-obj]
+              (let [dep-mode (get-in (cm/command-data command-path-obj) [:dependencies :mode])
+                    deps (find-command-dependencies command-path-obj instruction path-trie dep-mode)]
+                (assoc! fwd command-path-obj deps)))
+      (transient {})
+      cm-list)))
 

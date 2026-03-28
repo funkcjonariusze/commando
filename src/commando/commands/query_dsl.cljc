@@ -330,6 +330,18 @@
                     "Unedefinied command-resolve '" undefinied-tx-type "'")
                   {:resolver/tx undefinied-tx-type})))
 
+(def ^:private -explainer:command-resolve-kw
+  (malli/explainer
+    [:map
+     [:commando/resolve :keyword]
+     [:QueryExpression {:optional true} QueryExpressionMalli]]))
+
+(def ^:private -explainer:command-resolve-str
+  (malli/explainer
+    [:map
+     ["commando-resolve" [:string {:min 1}]]
+     ["QueryExpression" {:optional true} QueryExpressionMalli]]))
+
 (def ^{:doc "
   Description
     command-resolve-spec - behave like command-mutation-spec
@@ -518,22 +530,10 @@
                                  "The keyword :commando/resolve and the string \"commando-resolve\" cannot be used simultaneously in one command."
                                  (contains? m :commando/resolve)
                                  (malli-error/humanize
-                                   (malli/explain
-                                     [:map
-                                      [:commando/resolve :keyword]
-                                      [:QueryExpression
-                                       {:optional true}
-                                       QueryExpressionMalli]]
-                                     m))
+                                   (-explainer:command-resolve-kw m))
                                  (contains? m "commando-resolve")
                                  (malli-error/humanize
-                                   (malli/explain
-                                     [:map
-                                      ["commando-resolve" [:string {:min 1}]]
-                                      ["QueryExpression"
-                                       {:optional true}
-                                       QueryExpressionMalli]]
-                                     m)))]
+                                   (-explainer:command-resolve-str m)))]
                            (if m-explain
                              m-explain
                              true)))

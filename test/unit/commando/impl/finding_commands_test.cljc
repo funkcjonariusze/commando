@@ -22,21 +22,21 @@
 
 (deftest find-commands
   (testing "Basic cases"
-    (is (= [(cm/->CommandMapPath [] #'commando-registry/default-command-map-spec)]
+    (is (= #{(cm/->CommandMapPath [] #'commando-registry/default-command-map-spec)}
           (:internal/cm-list (#'commando/find-commands
                                {:status :ok
                                 :instruction {}
                                 :registry registry})))
       "Empty instruction return _map command")
-    (is (= [(cm/->CommandMapPath [] #'commando-registry/default-command-map-spec)
-            (cm/->CommandMapPath [:some-val] #'commando-registry/default-command-map-spec)
-            (cm/->CommandMapPath [:some-other] #'commando-registry/default-command-value-spec)
-            (cm/->CommandMapPath [:my-value] #'commando-registry/default-command-value-spec)
-            (cm/->CommandMapPath [:i] #'commando-registry/default-command-map-spec)
-            (cm/->CommandMapPath [:v] #'commando-registry/default-command-vec-spec)
-            (cm/->CommandMapPath [:some-val :a] #'commando-registry/default-command-value-spec)
-            (cm/->CommandMapPath [:i :am] #'commando-registry/default-command-map-spec)
-            (cm/->CommandMapPath [:i :am :deep] #'commando-registry/default-command-value-spec)]
+    (is (= #{(cm/->CommandMapPath [] #'commando-registry/default-command-map-spec)
+             (cm/->CommandMapPath [:some-val] #'commando-registry/default-command-map-spec)
+             (cm/->CommandMapPath [:some-other] #'commando-registry/default-command-value-spec)
+             (cm/->CommandMapPath [:my-value] #'commando-registry/default-command-value-spec)
+             (cm/->CommandMapPath [:i] #'commando-registry/default-command-map-spec)
+             (cm/->CommandMapPath [:v] #'commando-registry/default-command-vec-spec)
+             (cm/->CommandMapPath [:some-val :a] #'commando-registry/default-command-value-spec)
+             (cm/->CommandMapPath [:i :am] #'commando-registry/default-command-map-spec)
+             (cm/->CommandMapPath [:i :am :deep] #'commando-registry/default-command-value-spec)}
           (:internal/cm-list (#'commando/find-commands
                                {:status :ok
                                 :instruction {:some-val {:a 2}
@@ -46,11 +46,11 @@
                                               :v []}
                                 :registry registry})))
         "Instruction return internal commands _map, _vec, _value.")
-    (is (= [(cm/->CommandMapPath [] #'commando-registry/default-command-map-spec)
-            (cm/->CommandMapPath [:set] #'commando-registry/default-command-value-spec)
-            (cm/->CommandMapPath [:list] #'commando-registry/default-command-value-spec)
-            (cm/->CommandMapPath [:primitive] #'commando-registry/default-command-value-spec)
-            (cm/->CommandMapPath [:java-obj] #'commando-registry/default-command-value-spec)]
+    (is (= #{(cm/->CommandMapPath [] #'commando-registry/default-command-map-spec)
+             (cm/->CommandMapPath [:set] #'commando-registry/default-command-value-spec)
+             (cm/->CommandMapPath [:list] #'commando-registry/default-command-value-spec)
+             (cm/->CommandMapPath [:primitive] #'commando-registry/default-command-value-spec)
+             (cm/->CommandMapPath [:java-obj] #'commando-registry/default-command-value-spec)}
            (:internal/cm-list (#'commando/find-commands
                                 {:status :ok
                                  :instruction {:set #{:commando/from [:target]}
@@ -60,12 +60,12 @@
                                                             :cljs (js/Date.))}
                                  :registry registry})))
         "Any type that not Map,Vector(and registry not contain other commands) became a _value standart internal command")
-    (is (= [(cm/->CommandMapPath [] #'commando-registry/default-command-map-spec)
-            (cm/->CommandMapPath [:set] #'commando-registry/default-command-value-spec)
-            (cm/->CommandMapPath [:list] #'commando-registry/default-command-value-spec)
-            (cm/->CommandMapPath [:valid] #'commando-registry/default-command-vec-spec)
-            (cm/->CommandMapPath [:target] #'commando-registry/default-command-value-spec)
-            (cm/->CommandMapPath [:valid 0] cmds-builtin/command-from-spec)]
+    (is (= #{(cm/->CommandMapPath [] #'commando-registry/default-command-map-spec)
+             (cm/->CommandMapPath [:set] #'commando-registry/default-command-value-spec)
+             (cm/->CommandMapPath [:list] #'commando-registry/default-command-value-spec)
+             (cm/->CommandMapPath [:valid] #'commando-registry/default-command-vec-spec)
+             (cm/->CommandMapPath [:target] #'commando-registry/default-command-value-spec)
+             (cm/->CommandMapPath [:valid 0] cmds-builtin/command-from-spec)}
            (:internal/cm-list (#'commando/find-commands
                                 {:status :ok
                                  :instruction {:set #{:not-found}
@@ -75,13 +75,13 @@
                                  :registry registry})))
         "commando/from find and returned with corresponding command-map-path object")
     (is (=
-          [(cm/->CommandMapPath [] #'commando-registry/default-command-map-spec)
-           (cm/->CommandMapPath [:a] #'commando-registry/default-command-map-spec)
-           (cm/->CommandMapPath [:target] #'commando-registry/default-command-value-spec)
-           (cm/->CommandMapPath [:a "some"] #'commando-registry/default-command-map-spec)
-           (cm/->CommandMapPath [:a "some" :c] #'commando-registry/default-command-vec-spec)
-           (cm/->CommandMapPath [:a "some" :c 0] #'commando-registry/default-command-value-spec)
-           (cm/->CommandMapPath [:a "some" :c 1] cmds-builtin/command-from-spec)]
+          #{(cm/->CommandMapPath [] #'commando-registry/default-command-map-spec)
+            (cm/->CommandMapPath [:a] #'commando-registry/default-command-map-spec)
+            (cm/->CommandMapPath [:target] #'commando-registry/default-command-value-spec)
+            (cm/->CommandMapPath [:a "some"] #'commando-registry/default-command-map-spec)
+            (cm/->CommandMapPath [:a "some" :c] #'commando-registry/default-command-vec-spec)
+            (cm/->CommandMapPath [:a "some" :c 0] #'commando-registry/default-command-value-spec)
+            (cm/->CommandMapPath [:a "some" :c 1] cmds-builtin/command-from-spec)}
           (:internal/cm-list (#'commando/find-commands
                                {:status :ok
                                 :instruction {:a {"some" {:c [:some {:commando/from [:target]}]}}

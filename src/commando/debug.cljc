@@ -490,9 +490,7 @@
   ([registry instruction]
    (execute-debug registry instruction :table))
   ([registry instruction mode]
-   (let [result (binding [utils/*execute-config*
-                          (assoc (utils/execute-config) :debug-result true)]
-                  (commando/execute registry instruction))]
+   (let [result (commando/execute registry instruction)]
      (pprint-debug result instruction mode)
      result)))
 
@@ -592,39 +590,39 @@
 (defn execute-trace
   "Trace all nested commando/execute calls with timing.
 
-   Takes a zero-argument function that calls commando/execute and
-   returns its result unchanged. Prints a tree showing every execute
-   invocation (including recursive calls from macros/mutations) with
-   timing stats and instruction keys.
+   Calls commando/execute with the given registry and instruction,
+   prints a tree showing every execute invocation (including recursive
+   calls from macros/mutations) with timing stats and instruction keys.
 
    Add :__title or \"__title\" to an instruction to label it in the trace.
 
    Usage:
-     (execute-trace
-       #(commando/execute registry instruction))"
-  [execution-fn]
-  (let [stats-state (atom {})
-        result
-        (binding [utils/*execute-config*
-                  (assoc (utils/execute-config)
-                    :hook-execute-start
-                    (fn [e]
-                      (swap! stats-state
-                        (fn [s]
-                          (update-in s (:stack utils/*execute-internals*)
-                            #(merge % {:instruction-title
-                                       (when (map? (:instruction e))
-                                         (or (get (:instruction e) "__title")
-                                           (get (:instruction e) :__title)))})))))
-                    :hook-execute-end
-                    (fn [e]
-                      (swap! stats-state
-                        (fn [s]
-                          (update-in s (:stack utils/*execute-internals*)
-                            #(merge % {:stats            (:stats e)
-                                       :instruction-keys (when (map? (:instruction e))
-                                                           (vec (keys (:instruction e))))}))))))]
-          (execution-fn))]
-    (trace-print @stats-state)
-    result))
+     (execute-trace registry instruction)
+     (execute-trace registry instruction {:error-data-string false})"
+  ([registry instruction]
+   (execute-trace registry instruction nil))
+  ([registry instruction opts]
+   (let [stats-state (atom {})
+         trace-opts
+         (merge opts
+           {:hook-execute-start
+            (fn [e]
+              (swap! stats-state
+                (fn [s]
+                  (update-in s (:stack utils/*execute-internals*)
+                    #(merge % {:instruction-title
+                               (when (map? (:instruction e))
+                                 (or (get (:instruction e) "__title")
+                                   (get (:instruction e) :__title)))})))))
+            :hook-execute-end
+            (fn [e]
+              (swap! stats-state
+                (fn [s]
+                  (update-in s (:stack utils/*execute-internals*)
+                    #(merge % {:stats            (:stats e)
+                               :instruction-keys (when (map? (:instruction e))
+                                                   (vec (keys (:instruction e))))})))))})
+         result (commando/execute registry instruction trace-opts)]
+     (trace-print @stats-state)
+     result)))
 

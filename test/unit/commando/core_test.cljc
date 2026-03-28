@@ -5,6 +5,8 @@
    [commando.commands.builtin :as cmds-builtin]
    [commando.core             :as commando]
    [commando.impl.command-map :as cm]
+   [commando.impl.pathtrie    :as pathtrie]
+   [commando.impl.utils       :as utils]
    [malli.core                :as malli]
    [commando.impl.registry    :as commando-registry]))
 
@@ -225,4 +227,21 @@
                     {:commando/from [1] :=> [:fn (partial * 2)]}])]
       (is (commando/ok? result) "Vector instruction is acceptable")
       (is (= [{:value 10} 11 22] (:instruction result))))))
+
+;; -----------
+;; Internals always retained
+;; -----------
+
+(deftest internals-always-retained-test
+  (testing "Status-map always retains internal keys"
+    (let [result (commando/execute [cmds-builtin/command-from-spec]
+                   {:a 1 :b {:commando/from [:a]}})]
+      (is (commando/ok? result))
+      (is (some? (:internal/cm-list result)) "cm-list retained")
+      (is (some? (:internal/cm-dependency result)) "dependency graph retained")
+      (is (some? (:internal/path-trie result)) "path-trie retained")
+      (is (some? (:internal/cm-running-order result)) "running order retained")
+      (is (some? (:internal/cm-results result)) "cm-results retained")
+      (is (some? (:internal/original-instruction result)) "original instruction retained")
+      (is (some? (:registry result)) "registry retained"))))
 
