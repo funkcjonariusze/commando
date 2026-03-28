@@ -438,14 +438,13 @@
 
 (:instruction
  (debug/execute-trace
-   #(commando/execute
-      [builtin/command-from-spec
-       builtin/command-fn-spec
-       builtin/command-macro-spec
-       builtin/command-apply-spec]
-      {:__title "Result Of Two"
-       :result-1 {:commando/macro :sum-of-products  :a 2 :b 3 :c 4 :d 5}
-       :result-2 {:commando/macro :sum-of-products  :a 2 :b 3 :c 4 :d 5}})))
+   [builtin/command-from-spec
+    builtin/command-fn-spec
+    builtin/command-macro-spec
+    builtin/command-apply-spec]
+   {:__title "Result Of Two"
+    :result-1 {:commando/macro :sum-of-products  :a 2 :b 3 :c 4 :d 5}
+    :result-2 {:commando/macro :sum-of-products  :a 2 :b 3 :c 4 :d 5}}))
 ;; => {:result 26}
 ;; because (2*3) + (4*5) = 6 + 20 = 26
 ;;

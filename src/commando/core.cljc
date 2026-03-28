@@ -1,6 +1,6 @@
 (ns commando.core
   (:require
-   [commando.impl.dependency       :as deps]
+   [commando.impl.dependency       :as dependency]
    [commando.impl.executing        :as executing]
    [commando.impl.finding-commands :as finding-commands]
    [commando.impl.graph            :as graph]
@@ -90,17 +90,21 @@
   [{:keys [instruction registry] :as status-map}]
   (smap/core-step-safe status-map "find-commands"
     (fn [sm]
-      (-> sm
-          (assoc :internal/cm-list (finding-commands/find-commands instruction registry))
-          (smap/status-map-handle-success {:message "Commands were successfully collected"})))))
+      (let [{:keys [commands trie]} (finding-commands/find-commands instruction registry)]
+        (-> sm
+          (assoc :internal/cm-list commands)
+          (assoc :internal/path-trie trie)
+          (smap/status-map-handle-success {:message "Commands were successfully collected"}))))))
 
 (defn ^:private build-deps-tree
-  [{:keys [instruction] :internal/keys [cm-list] :as status-map}]
+  "Builds forward dependency graph using the path-trie produced by find-commands."
+  [{:keys [instruction] :internal/keys [cm-list path-trie] :as status-map}]
   (smap/core-step-safe status-map "build-deps-tree"
     (fn [sm]
-      (-> sm
-        (assoc :internal/cm-dependency (deps/build-dependency-graph instruction cm-list))
-        (smap/status-map-handle-success {:message "Dependency map was successfully built"})))))
+      (let [fwd (dependency/build-dependency-graph instruction cm-list path-trie)]
+        (-> sm
+          (assoc :internal/cm-dependency fwd)
+          (smap/status-map-handle-success {:message "Dependency map was successfully built"}))))))
 
 (defn ^:private sort-commands-by-deps
   [status-map]
@@ -126,16 +130,19 @@
       (binding [utils/*command-map-spec-registry* registry]
         (if (empty? cm-running-order)
           (smap/status-map-handle-success sm {:message "No commands to execute"})
-          (let [[updated-instruction error-info] (executing/execute-commands instruction cm-running-order)]
+          (let [[updated-instruction error-info cm-results]
+                (executing/execute-commands instruction cm-running-order)]
             (if error-info
               (-> sm
                   (assoc :instruction updated-instruction)
+                  (assoc :internal/cm-results cm-results)
                   (smap/status-map-handle-error {:message "Command execution failed during evaluation"
                                                  :error (utils/serialize-exception (:original-error error-info))
                                                  :command-path (:command-path error-info)
                                                  :command-type (:command-type error-info)}))
               (-> sm
                   (assoc :instruction updated-instruction)
+                  (assoc :internal/cm-results cm-results)
                   (smap/status-map-handle-success {:message "All commands executed successfully"})))))))))
 
 (defn ^:private prepare-execution-status-map [status-map]
@@ -145,34 +152,51 @@
       (update :internal/cm-running-order registry/remove-runtime-registry-commands-from-command-list)
       (update :registry registry/reset-runtime-registry))))
 
-(defn ^:private crop-final-status-map [status-map]
-  (if (:debug-result (utils/execute-config))
-    status-map
-    (dissoc status-map
-            :internal/cm-list
-            :internal/cm-dependency
-            :internal/cm-running-order
-            :registry)))
+;; -- Full Execute (internal) --
 
-;; -- Execute --
-
-(defn execute
+(defn- full-execute
+  "Full execution pipeline. Always retains internal structures."
   [registry instruction]
-  {:pre [(or (vector? registry) (registry/built? registry))]}
-  (binding [utils/*execute-internals* (utils/-execute-internals-push (str (random-uuid)))]
-    (let [start-time (utils/now)]
-      (-> (smap/status-map-pure {:instruction instruction})
-        (utils/hook-process (:hook-execute-start (utils/execute-config)))
-        (use-registry registry)
-        (find-commands)
-        (build-deps-tree)
-        (sort-commands-by-deps)
-        (prepare-execution-status-map)
-        (execute-commands!)
-        (smap/status-map-add-measurement "execute" start-time (utils/now))
-        (utils/hook-process (:hook-execute-end (utils/execute-config)))
-        (crop-final-status-map)))))
+  (let [start-time (utils/now)
+        config (utils/execute-config)]
+    (-> (smap/status-map-pure {:instruction instruction})
+      (utils/hook-process (:hook-execute-start config))
+      (use-registry registry)
+      (find-commands)
+      (build-deps-tree)
+      (sort-commands-by-deps)
+      (prepare-execution-status-map)
+      (execute-commands!)
+      (smap/status-map-add-measurement "execute" start-time (utils/now))
+      (utils/hook-process (:hook-execute-end config))
+      (assoc :internal/original-instruction instruction))))
+
+;; -- Public API --
 
 (defn failed? [status-map] (smap/failed? status-map))
 (defn ok? [status-map] (smap/ok? status-map))
+
+(defn execute
+  "Evaluates an instruction with a command registry.
+
+   The optional third argument is a config map:
+     :error-data-string - (boolean) serialize exception data as strings
+     :hook-execute-start - (fn [status-map]) called before execution
+     :hook-execute-end   - (fn [status-map]) called after execution
+
+   Config keys are inherited by nested execute calls. Inner calls can
+   override specific keys — non-overridden keys come from the parent.
+
+   Examples:
+     ;; Full execution
+     (execute reg instruction)
+
+     ;; With config
+     (execute reg instruction {:error-data-string false})"
+  ([registry instruction] (execute registry instruction nil))
+  ([registry instruction opts]
+   {:pre [(or (vector? registry) (registry/built? registry))]}
+   (binding [utils/*execute-internals* (utils/-execute-internals-push (str (random-uuid)))
+             utils/*execute-config*    (utils/execute-config-update opts)]
+     (full-execute registry instruction))))
 

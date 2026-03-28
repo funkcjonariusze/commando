@@ -739,11 +739,24 @@ Add `:__title` (or `"__title"`) to an instruction to label it in the trace outpu
 
 ## Status-Map and Internals
 
-The main function for executing instructions is `commando.core/execute`, which returns a so-called Status-Map. A Status-Map is a data structure that contains the outcome of instruction execution, including results, successes, warnings, errors, and internal execution order.)
+`commando.core/execute` returns a **Status-Map** — a data structure that contains the full outcome of instruction execution. All keys are always present in the result, regardless of whether execution succeeded or failed.
 
-On successful execution (`:ok`), you get:
-- `:instruction` - the resulting evaluated data map.
-- `:successes` - information about successful execution steps.
+- `:status` — `:ok` or `:failed`. Outcome of the execution.
+- `:instruction` — on `:ok`, the fully evaluated instruction with all commands resolved to their values. On `:failed`, the partially or completely unexecuted original instruction.
+- `:errors` — vector of error objects accumulated during execution. Each entry is a map with at least `:message`; may also contain `:error` (serialized exception), `:command-path`, `:command-type`. Empty `[]` on success.
+- `:warnings` — vector of non-critical issues, e.g. skipped pipeline steps after a failure. Empty `[]` when there are no warnings.
+- `:successes` — vector of informational messages about completed pipeline steps. Each entry is a map with `:message`.
+- `:stats` — vector of timing measurements for each pipeline step. Each entry is a tuple `[step-name duration-ns formatted-string]`, e.g. `["execute-commands!" 95838 "95.838µs"]`.
+- `:uuid` — unique identifier for this execution invocation.
+- `:registry` — the built command registry used for this execution.
+- `:internal/cm-list` — set of all discovered Command objects (`CommandMapPath`) found during the `find-commands` step.
+- `:internal/cm-dependency` — forward dependency graph `{CommandMapPath → #{deps}}`, which commands each command depends on.
+- `:internal/cm-running-order` — vector of commands in topologically sorted execution order (Kahn's algorithm).
+- `:internal/cm-results` — map `{CommandMapPath → resolved-value}`, the result of each command's `:apply` function.
+- `:internal/path-trie` — nested trie structure for O(depth) command lookup by path.
+- `:internal/original-instruction` — the original instruction as passed by the user, before any command evaluation.
+
+### Example: successful execution
 
 ```clojure
 (require '[commando.core :as commando])
@@ -755,144 +768,85 @@ On successful execution (`:ok`), you get:
    "2" {:commando/from ["1"]}
    "3" {:commando/from ["2"]}})
 
-;; RETURN =>
-{:status :ok,
+;; =>
+{:status :ok
  :instruction {"1" 1, "2" 1, "3" 1}
- :stats
- [["execute-commands!" 95838   "95.838µs"]
-  ["execute"           1085471 "1.085471ms"]]
+ :errors []
+ :warnings []
  :successes
- [{:message
-   "Commando. parse-instruction-map. Entities was successfully collected"}
-  {:message
-   "Commando. build-deps-tree. Dependency map was successfully built"}
-  {:message
-   "Commando. sort-entities-by-deps. Entities were sorted and prepared for evaluation"}
-  {:message
-   "Commando. compress-execution-data. Status map was compressed"}
-  {:message
-   "Commando. evaluate-instruction-commands. Data term was processed"}]}
+ [{:message "Commands were successfully collected"}
+  {:message "Dependency map was successfully built"}
+  {:message "..."}]
+ :stats
+ [["use-registry"        12500  "12.5µs"]
+  ["find-commands"        35000  "35µs"]
+  ["build-deps-tree"      18000  "18µs"]
+  ["sort-commands-by-deps" 9000  "9µs"]
+  ["execute-commands!"    95838  "95.838µs"]
+  ["execute"            1085471  "1.085471ms"]]
+ :uuid "a1b2c3..."
+ :registry ...
+ :internal/cm-list #{...}
+ :internal/cm-dependency {...}
+ :internal/cm-running-order [...]
+ :internal/cm-results {...}
+ :internal/path-trie {...}
+ :internal/original-instruction {"1" 1, "2" {:commando/from ["1"]}, "3" {:commando/from ["2"]}}}
 ```
 
-On unsuccessful execution (`:failed`), you get:
-- `:instruction` - the partially or completely unexecuted instruction given by the user
-- `:successes` - a list of successful actions completed before the failure
-- `:warnings` - a list of non-critical errors or skipped steps
-- `:errors` - a list of error objects, sometimes with exception data or additional keys
-- `:internal/cm-list` (optional) - a list of Command objects with command meta-information
-- `:internal/cm-dependency` (optional) - a map of dependencies
-- `:internal/cm-running-order` (optional) - the resulting list of commands to be executed in order
+### Example: failed execution
 
 ```clojure
-(require '[commando.core :as commando])
-(require '[commando.commands.builtin :as commands-builtin])
-
 (commando/execute
   [commands-builtin/command-from-spec]
   {"1" 1
    "2" {:commando/from ["1"]}
    "3" {:commando/from ["WRONG" "PATH"]}})
 
-;; RETURN =>
+;; =>
 {:status :failed
  :instruction
  {"1" 1
   "2" {:commando/from ["1"]}
   "3" {:commando/from ["WRONG" "PATH"]}}
  :errors
- [{:message "build-deps-tree. Failed to build `:point` dependency. Key `Commando.` with path: `:commando/from`, - referring to non-existing value",
-   :path ["3"],
-   :command {:commando/from ["WRONG" "PATH"]}}],
+ [{:message "Point dependency failed: key ':commando/from' references non-existent path [\"WRONG\" \"PATH\"]"
+   :path ["3"]
+   :command {:commando/from ["WRONG" "PATH"]}}]
  :warnings
- [{:message
-   "Commando. sort-entities-by-deps. Skipping mandatory step"}
-  {:message
-   "Commando. compress-execution-data. Skipping mandatory step"}
-  {:message
-   "Commando. evaluate-instruction-commands. Skipping mandatory step"}],
+ [{:message "Skipping sort-commands-by-deps"}
+  {:message "Skipping execute-commands!"}]
  :successes
- [{:message
-   "Commando. parse-instruction-map. Entities were successfully collected"}],
- :internal/cm-list
- [#<CommandMapPath "root[_map]">
-  #<CommandMapPath "root,3[from]">
-  #<CommandMapPath "root,2[from]">
-  #<CommandMapPath "root,1[_value]">]}
+ [{:message "Commands were successfully collected"}]
+ :stats [...]
+ :uuid "d4e5f6..."
+ :internal/cm-list #{...}
+ ...}
+```
+
+Helper predicates for checking status:
+
+```clojure
+(commando/ok? result)     ;; => true | false
+(commando/failed? result) ;; => true | false
 ```
 
 ### Configuring Execution Behavior
 
-The `commando.impl.utils/*execute-config*` dynamic variable allows for fine-grained control over `commando/execute`'s behavior. You can bind this variable to a map containing the following configuration keys:
+`commando/execute` accepts an optional third argument — a configuration map. Config keys control execution behavior and are automatically inherited by nested `execute` calls (e.g. from `:commando/macro` or `:commando/resolve`). Inner calls can override specific keys — non-overridden keys come from the parent.
 
-- `:debug-result` (boolean)
-- `:error-data-string` (boolean)
+```clojure
+(commando/execute registry instruction
+  {:error-data-string false
+   :hook-execute-start (fn [status-map] ...)
+   :hook-execute-end   (fn [status-map] ...)})
+```
+
+- `:error-data-string` (boolean, default `true`)
 - `:hook-execute-start` (function) — called before execution begins, receives execution context map
 - `:hook-execute-end` (function) — called after execution completes, receives execution context map with `:stats` and `:instruction`
 
 Hooks allow you to observe or instrument the execution lifecycle — for example, to collect timing data, log nested executions, or build execution traces. See [Debugging](#debugging) for a practical use via `execute-trace`.
-
-#### `:debug-result`
-
-When set to `true`, the returned status-map will include additional execution information, such as `:internal/cm-list`, `:internal/cm-dependency`, and `:internal/cm-running-order`. This helps in analyzing the instruction's execution flow.
-
-Here's an example of how to use `:debug-result`:
-
-```clojure
-(require '[commando.core :as commando])
-(require '[commando.commands.builtin :as commands-builtin])
-(require '[commando.impl.utils :as commando-utils])
-
-(binding [commando-utils/*execute-config* {:debug-result true}]
-  (commando/execute
-    [commands-builtin/command-from-spec]
-    {"1" 1
-     "2" {:commando/from ["1"]}
-     "3" {:commando/from ["2"]}}))
-
-;; RETURN =>
-{:status :ok,
- :instruction {"1" 1, "2" 1, "3" 1}
- :stats
- [["use-registry"           111876 "111.876µs"]
-  ["find-commands"          303062 "303.062µs"]
-  ["build-deps-tree"        134049 "134.049µs"]
-  ["sort-commands-by-deps"  292206 "292.206µs"]
-  ["execute-commands!"       53762 "53.762µs"]
-  ["execute"               1074110 "1.07411ms"]]
- :registry
- [{:type               :commando/from,
-   :recognize-fn       #function[commando.commands.builtin/fn],
-   :validate-params-fn #function[commando.commands.builtin/fn],
-   :apply              #function[commando.commands.builtin/fn],
-   :dependencies       {:mode :point, :point-key [:commando/from]}}],
- :warnings [],
- :errors [],
- :successes
- [{:message "Commands were successfully collected"}
-  {:message "Dependency map was successfully built"}
-  {:message "Commando. sort-entities-by-deps. Entities was sorted and prepare for evaluating"}
-  {:message "All commands executed successfully"}],
- :internal/cm-list
- ["root[_map]"
-  "root,1[_value]"
-  "root,2[from]"
-  "root,3[from]"]
- :internal/cm-running-order
- ["root,2[from]"
-  "root,3[from]"],
- :internal/cm-dependency
- {"root[_map]"     #{"root,2[from]" "root,1[_value]" "root,3[from]"},
-  "root,1[_value]" #{},
-  "root,2[from]"   #{"root,1[_value]"},
-  "root,3[from]"   #{"root,2[from]"}}}
-```
-
-`:internal/cm-list` - a list of all recognized commands in an instruction. This list also contains the `_map`, `_value`, and the unmentioned `_vector` commands. Commando includes several internal built-in commands that describe the _instruction's structure_. An _instruction_ is a composition of maps, their values, and vectors that represent its structure and help build a clear dependency graph. These commands are removed from the final output after this step, but included in the compiled registry.
-
-`:internal/cm-dependency` - describes how parts of an _instruction_ depend on each other.
-
-`:internal/cm-running-order` - the correct order in which to execute commands.
-
 
 #### `:error-data-string`
 
@@ -918,10 +872,10 @@ When `:error-data-string` is `true`, the `:data` key within serialized `Exceptio
 
 
 (def value
-  (binding [sut/*execute-config* {:error-data-string false}]
-    (commando/execute [commands-builtin/command-from-spec]
-      {"a" 10
-       "ref" {:commando/from "BROKEN"}})))
+  (commando/execute [commands-builtin/command-from-spec]
+    {"a" 10
+     "ref" {:commando/from "BROKEN"}}
+    {:error-data-string false}))
 (get-in value [:errors 0 :error])
 ;; =>
 ;; {:type "exception-info",
@@ -948,7 +902,7 @@ All benchmarks were conducted on an **Intel Core i9-13980HX**. The primary metri
 The graph below illustrates the total execution time for instructions with a typical number of dependencies, ranging from 1,250 to 80,000. As you can see, the execution time scales linearly and remains in the low millisecond range, demonstrating excellent performance for common use cases.
 
 <div align="center">
-<img width="100%" src="./test/perf/commando/execute(normal) milisecs_x_deps.png">
+<img width="100%" src="./test/perf/commando/Execute. Normal Total.png">
 </div>
 
 #### Execution Step Analysis
@@ -967,7 +921,7 @@ The following graphs show the performance of each step under both normal and ext
 Under normal conditions, each execution step completes in just a few milliseconds. The overhead of parsing, dependency resolution, and execution is minimal, ensuring a fast and responsive system.
 
 <div align="center">
-<img width="100%" src="./test/perf/commando/execute-steps(normal) milisecs_x_deps.png">
+<img width="100%" src="./test/perf/commando/Execute. Normal Steps.png">
 </div>
 
 **Massive Workloads (up to 5,000,000 dependencies)**
@@ -975,7 +929,7 @@ Under normal conditions, each execution step completes in just a few millisecond
 To test the limits of the library, we benchmarked it with instructions containing up to 5 million dependencies. The graph below shows that while the system scales, the `find-commands` (parsing) and `build-deps-tree` (dependency graph construction) phases become the primary bottlenecks. This demonstrates that the core execution remains fast, but performance at extreme scales is dominated by the initial analysis steps.
 
 <div align="center">
-<img width="100%" src="./test/perf/commando/execute-steps(massive dep grow) secs_x_deps.png">
+<img width="100%" src="./test/perf/commando/Execute. Massive Dependency Steps.png">
 </div>
 
 # Examples & Guides

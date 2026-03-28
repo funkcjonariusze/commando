@@ -68,6 +68,16 @@
    default-command-map-spec
    default-command-value-spec])
 
+(def structural-command-types
+  "Set of internal/structural command types that don't affect execution order."
+  (into #{} (map :type internal-command-specs)))
+
+(defn structural-command-type?
+  "Returns true if the given command type is a structural/internal type
+   (:instruction/_value, :instruction/_map, :instruction/_vec)."
+  [command-type]
+  (contains? structural-command-types command-type))
+
 (defn built?
   "Returns true if the given value is a properly built registry map."
   [registry]
@@ -107,12 +117,11 @@
   (dissoc enriched-registry :registry-runtime))
 
 (defn remove-runtime-registry-commands-from-command-list [cm-vector]
-  (let [cm-type-instruction-defaults
-        (into #{} (map :type internal-command-specs))]
-   (reduce (fn [acc command-map]
-             (if (contains? cm-type-instruction-defaults (:type (cm/command-data command-map)))
-               acc (conj acc command-map)))
-     [] cm-vector)))
+  ;; Reuse `structural-command-types` def instead of rebuilding the set on every call.
+  (reduce (fn [acc command-map]
+            (if (contains? structural-command-types (:type (cm/command-data command-map)))
+              acc (conj acc command-map)))
+    [] cm-vector))
 
 ;; ----------------
 ;; Registry Helpers
@@ -134,5 +143,6 @@
   [built-registry command-map-spec-type]
   (let [new-vec (filterv #(not= (:type %) command-map-spec-type) (:registry built-registry))]
     (build new-vec)))
+
 
 

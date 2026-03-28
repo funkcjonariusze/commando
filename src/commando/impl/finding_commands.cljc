@@ -1,23 +1,34 @@
 (ns commando.impl.finding-commands
   (:require
    [commando.impl.command-map :as cm]
+   [commando.impl.pathtrie :as pathtrie]
    [commando.impl.utils :as utils]))
 
-(defn ^:private coll-child-paths
-  "Returns child paths for regular collections that should be traversed."
-  [value current-path]
+(defn ^:private enqueue-coll-children!
+  "Enqueues child paths for regular collections directly into the transient queue.
+   Avoids intermediate vector allocation compared to mapv approach."
+  [queue value current-path]
   (cond
-    (map? value) (doall (map (fn [[k _v]] (conj current-path k)) (seq value)))
-    (coll? value) (doall (map (fn [i] (conj current-path i)) (range (count value))))
-    :else []))
+    (map? value)
+    (reduce-kv (fn [q k _] (conj! q (conj current-path k))) queue value)
 
-(defmulti ^:private command-child-paths
-  "Returns child paths that should be traversed for a command based on its dependency mode."
-  (fn [command-spec _value _current-path] (get-in command-spec [:dependencies :mode])))
+    (coll? value)
+    (let [c (count value)]
+      (loop [i 0 q queue]
+        (if (= i c) q
+          (recur (inc i) (conj! q (conj current-path i))))))
 
-(defmethod command-child-paths :default [_command-spec _value _current-path] [])
+    :else queue))
 
-(defmethod command-child-paths :all-inside [_command-spec value current-path] (coll-child-paths value current-path))
+(defmulti ^:private enqueue-command-children!
+  "Enqueues child paths that should be traversed for a command based on its dependency mode.
+   Takes a transient queue vector and returns it with children added."
+  (fn [_queue command-spec _value _current-path] (get-in command-spec [:dependencies :mode])))
+
+(defmethod enqueue-command-children! :default [queue _command-spec _value _current-path] queue)
+
+(defmethod enqueue-command-children! :all-inside [queue _command-spec value current-path]
+  (enqueue-coll-children! queue value current-path))
 
 (defn command?
   [{:keys [recognize-fn]
@@ -48,51 +59,46 @@
   (some (fn [command-spec]
           (when (command? command-spec value)
             (let [value-valid-return (command-valid? command-spec value)]
-              (cond
-                (true? value-valid-return) command-spec
-                (or
-                 (false? value-valid-return)
-                 (nil? value-valid-return))
-                (throw
-                  (ex-info
-                    (str
-                      "Failed while validating params for " (:type command-spec) ". Check ':validate-params-fn' property for corresponding command with value it was evaluated on.")
-                    {:command-type (:type command-spec)
-                     :path path
-                     :value value}))
-                :else
-                (throw
-                  (ex-info
-                    (str
-                      "Failed while validating params for " (:type command-spec) ". Check ':validate-params-fn' property for corresponding command with value it was evaluated on.")
-                    {:command-type (:type command-spec)
-                     :reason value-valid-return
-                     :path path
-                     :value value}))))))
+              (if (true? value-valid-return) command-spec
+                  (throw
+                    (ex-info
+                      (str
+                        "Failed while validating params for " (:type command-spec) ". Check ':validate-params-fn' property for corresponding command with value it was evaluated on.")
+                      {:command-type (:type command-spec)
+                       :reason (when value-valid-return value-valid-return)
+                       :path path
+                       :value value}))))))
         command-spec-vector))
 
 (defn find-commands
-  "Traverses the instruction tree (BFS algo) and collects all commands defined by the registry."
-  [instruction {:keys [registry-runtime] :as _command-registry}]
-  (loop [queue (vec [[]])
-         found-commands []
-         debug-stack-map {}]
-    (if (empty? queue)
-      found-commands
-      (let [current-path (first queue)
-            remaining-paths (subvec queue 1)
-            current-value (get-in instruction current-path)
-            debug-stack (if (:debug-result (utils/execute-config)) (get debug-stack-map current-path (list)) (list))]
-        (if-let [command-spec (instruction-command-spec registry-runtime current-value current-path)]
-          (let [command (cm/->CommandMapPath
-                         current-path
-                         (if (:debug-result (utils/execute-config)) (merge command-spec {:__debug_stack debug-stack}) command-spec))
-                child-paths (command-child-paths command-spec current-value current-path)
-                updated-debug-stack-map (if (:debug-result (utils/execute-config))
-                                          (reduce #(assoc %1 %2 (conj debug-stack command)) debug-stack-map child-paths)
-                                          {})]
-            (recur (into remaining-paths child-paths) (conj found-commands command) updated-debug-stack-map))
-          ;; No match - traverse children if coll, skip if leaf
-          (recur (into remaining-paths (coll-child-paths current-value current-path))
-                 found-commands
-                 debug-stack-map))))))
+  "Traverses the instruction tree (BFS) and collects all commands defined by the registry.
+   Returns {:commands #{...} :trie {...}} — the command set and path-trie built in the same pass.
+
+   Options:
+   Optimizations:
+   - Index-based transient queue: O(N) instead of O(N²) from subvec+into copying
+   - Transient found-commands set: O(N) set allocations saved
+   - Direct enqueue: no intermediate mapv vectors for child-path generation
+   - Transient trie root: N root-level HAMT copies avoided during bulk construction"
+  ([instruction command-registry]
+   (find-commands instruction command-registry nil))
+  ([instruction {:keys [registry-runtime] :as _command-registry} _opts]
+   (loop [queue (transient [[]])
+            idx 0
+            found-commands (transient #{})
+            trie (transient {})]
+       (if (= idx (count queue))
+         {:commands (persistent! found-commands) :trie (persistent! trie)}
+         (let [current-path (nth queue idx)
+               current-value (get-in instruction current-path)]
+           (if-let [command-spec (instruction-command-spec registry-runtime current-value current-path)]
+             (let [command (cm/->CommandMapPath current-path command-spec)]
+               (recur (enqueue-command-children! queue command-spec current-value current-path)
+                      (inc idx)
+                      (conj! found-commands command)
+                      (pathtrie/trie-insert-command! trie command)))
+             (recur (enqueue-coll-children! queue current-value current-path)
+                    (inc idx)
+                    found-commands
+                    trie)))))))
+

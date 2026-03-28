@@ -10,6 +10,16 @@
 ;; Fn
 ;; ======================
 
+(def ^:private -schema:command-fn
+  [:map
+   [:commando/fn utils/ResolvableFn]
+   [:args {:optional true} coll?]
+   [:=> {:optional true} utils/malli:driver-spec]
+   ["=>" {:optional true} utils/malli:driver-spec]])
+
+(def ^:private -validator:command-fn  (malli/validator -schema:command-fn))
+(def ^:private -explainer:command-fn  (malli/explainer -schema:command-fn))
+
 (def
   ^{:doc "
   Description
@@ -39,17 +49,9 @@
   {:type :commando/fn
    :recognize-fn #(and (map? %) (contains? % :commando/fn))
    :validate-params-fn (fn [m]
-                         (if-let [m-explain
-                                  (malli-error/humanize
-                                    (malli/explain
-                                      [:map
-                                       [:commando/fn utils/ResolvableFn]
-                                       [:args {:optional true} coll?]
-                                       [:=> {:optional true} utils/malli:driver-spec]
-                                       ["=>" {:optional true} utils/malli:driver-spec]]
-                                      m))]
-                           m-explain
-                           true))
+                         (if (-validator:command-fn m)
+                           true
+                           (malli-error/humanize (-explainer:command-fn m))))
    :apply (fn [_instruction _command-map m]
             (let [m-fn (utils/resolve-fn (:commando/fn m))
                   m-args (:args m [])
@@ -59,6 +61,15 @@
 ;; ======================
 ;; Apply
 ;; ======================
+
+(def ^:private -schema:command-apply
+  [:map
+   [:commando/apply :any]
+   [:=> {:optional true} utils/malli:driver-spec]
+   ["=>" {:optional true} utils/malli:driver-spec]])
+
+(def ^:private -validator:command-apply  (malli/validator -schema:command-apply))
+(def ^:private -explainer:command-apply  (malli/explainer -schema:command-apply))
 
 (def ^{:doc "
   Description
@@ -80,14 +91,9 @@
   {:type :commando/apply
    :recognize-fn #(and (map? %) (contains? % :commando/apply))
    :validate-params-fn (fn [m]
-                         (if-let [m-explain
-                                  (malli-error/humanize
-                                    (malli/explain [:map
-                                                    [:commando/apply :any]
-                                                    [:=> {:optional true} utils/malli:driver-spec]
-                                                    ["=>" {:optional true} utils/malli:driver-spec]] m))]
-                           m-explain
-                           true))
+                         (if (-validator:command-apply m)
+                           true
+                           (malli-error/humanize (-explainer:command-apply m))))
    :apply (fn [_instruction _command-path-obj command-map]
             (:commando/apply command-map))
    :dependencies {:mode :all-inside}})
@@ -100,6 +106,24 @@
   (malli/deref
     [:sequential {:error/message "commando/from should be a sequence path to value in Instruction: [:some 2 \"value\"]"}
      [:or :string :keyword :int]]))
+
+(def ^:private -schema:command-from-kw
+  [:map
+   [:commando/from -malli:commando-from-path]
+   [:=> {:optional true} utils/malli:driver-spec]
+   ["=>" {:optional true} utils/malli:driver-spec]])
+
+(def ^:private -validator:command-from-kw  (malli/validator -schema:command-from-kw))
+(def ^:private -explainer:command-from-kw  (malli/explainer -schema:command-from-kw))
+
+(def ^:private -schema:command-from-str
+  [:map
+   ["commando-from" -malli:commando-from-path]
+   [:=> {:optional true} utils/malli:driver-spec]
+   ["=>" {:optional true} utils/malli:driver-spec]])
+
+(def ^:private -validator:command-from-str  (malli/validator -schema:command-from-str))
+(def ^:private -explainer:command-from-str  (malli/explainer -schema:command-from-str))
 
 (def
   ^{:doc "
@@ -162,22 +186,12 @@
                                  "The keyword :commando/from and the string \"commando-from\" cannot be used simultaneously in one command."
 
                                  (contains? m :commando/from)
-                                 (malli-error/humanize
-                                   (malli/explain
-                                     [:map
-                                      [:commando/from -malli:commando-from-path]
-                                      [:=> {:optional true} utils/malli:driver-spec]
-                                      ["=>" {:optional true} utils/malli:driver-spec]]
-                                     m))
+                                 (when-not (-validator:command-from-kw m)
+                                   (malli-error/humanize (-explainer:command-from-kw m)))
 
                                  (contains? m "commando-from")
-                                 (malli-error/humanize
-                                   (malli/explain
-                                     [:map
-                                      ["commando-from" -malli:commando-from-path]
-                                      [:=> {:optional true} utils/malli:driver-spec]
-                                      ["=>" {:optional true} utils/malli:driver-spec]]
-                                     m)))]
+                                 (when-not (-validator:command-from-str m)
+                                   (malli-error/humanize (-explainer:command-from-str m))))]
                            (if m-explain
                              m-explain
                              true)))
@@ -191,6 +205,26 @@
 ;; ======================
 ;; Context
 ;; ======================
+
+(def ^:private -schema:command-context-kw
+  [:map
+   [:commando/context [:sequential {:error/message "commando/context should be a sequential path: [:some :key]"}
+                       [:or :string :keyword :int]]]
+   [:=> {:optional true} utils/malli:driver-spec]
+   ["=>" {:optional true} utils/malli:driver-spec]])
+
+(def ^:private -validator:command-context-kw  (malli/validator -schema:command-context-kw))
+(def ^:private -explainer:command-context-kw  (malli/explainer -schema:command-context-kw))
+
+(def ^:private -schema:command-context-str
+  [:map
+   ["commando-context" [:sequential {:error/message "commando-context should be a sequential path: [\"some\" \"key\"]"}
+                        [:or :string :keyword :int]]]
+   [:=> {:optional true} utils/malli:driver-spec]
+   ["=>" {:optional true} utils/malli:driver-spec]])
+
+(def ^:private -validator:command-context-str  (malli/validator -schema:command-context-str))
+(def ^:private -explainer:command-context-str  (malli/explainer -schema:command-context-str))
 
 (defn command-context-spec
   "Creates a CommandMapSpec that resolves references to external context data
@@ -233,42 +267,29 @@
      `commando.commands.builtin/command-from-spec`"
   [ctx]
   {:pre [(map? ctx)]}
-  (let [kw-key :commando/context
-        str-key "commando-context"]
-    {:type kw-key
-     :recognize-fn #(and (map? %)
-                      (or (contains? % kw-key)
-                          (contains? % str-key)))
-     :validate-params-fn
-     (fn [m]
-       (let [m-explain
-             (cond
-               (and (contains? m kw-key) (contains? m str-key))
-               "The keyword :commando/context and the string \"commando-context\" cannot be used simultaneously in one command."
-               (contains? m kw-key)
-               (malli-error/humanize
-                 (malli/explain
-                   [:map
-                    [kw-key [:sequential {:error/message "commando/context should be a sequential path: [:some :key]"}
-                             [:or :string :keyword :int]]]
-                    [:=> {:optional true} utils/malli:driver-spec]
-                    ["=>" {:optional true} utils/malli:driver-spec]]
-                   m))
-               (contains? m str-key)
-               (malli-error/humanize
-                 (malli/explain
-                   [:map
-                    [str-key [:sequential {:error/message "commando-context should be a sequential path: [\"some\" \"key\"]"}
-                              [:or :string :keyword :int]]]
-                    [:=> {:optional true} utils/malli:driver-spec]
-                    ["=>" {:optional true} utils/malli:driver-spec]]
-                   m)))]
-         (if m-explain m-explain true)))
-     :apply
-     (fn [_instruction _command-path-obj command-map]
-       (let [path (or (get command-map kw-key) (get command-map str-key))]
-         (get-in ctx path nil)))
-     :dependencies {:mode :none}}))
+  {:type :commando/context
+   :recognize-fn #(and (map? %)
+                    (or
+                      (contains? % :commando/context)
+                      (contains? % "commando-context")))
+   :validate-params-fn
+   (fn [m]
+     (let [m-explain
+           (cond
+             (and (contains? m :commando/context) (contains? m "commando-context"))
+             "The keyword :commando/context and the string \"commando-context\" cannot be used simultaneously in one command."
+             (contains? m :commando/context)
+             (when-not (-validator:command-context-kw m)
+               (malli-error/humanize (-explainer:command-context-kw m)))
+             (contains? m "commando-context")
+             (when-not (-validator:command-context-str m)
+               (malli-error/humanize (-explainer:command-context-str m))))]
+       (if m-explain m-explain true)))
+   :apply
+   (fn [_instruction _command-path-obj command-map]
+     (let [path (or (get command-map :commando/context) (get command-map "commando-context"))]
+       (get-in ctx path nil)))
+   :dependencies {:mode :none}})
 
 ;; ======================
 ;; Mutation
@@ -284,6 +305,22 @@
                     undefined-tx-type
                     "'")
            {:commando/mutation undefined-tx-type})))
+
+(def ^:private -schema:command-mutation-kw
+  [:map [:commando/mutation [:or :keyword :string]]
+   [:=> {:optional true} utils/malli:driver-spec]
+   ["=>" {:optional true} utils/malli:driver-spec]])
+
+(def ^:private -validator:command-mutation-kw  (malli/validator -schema:command-mutation-kw))
+(def ^:private -explainer:command-mutation-kw  (malli/explainer -schema:command-mutation-kw))
+
+(def ^:private -schema:command-mutation-str
+  [:map ["commando-mutation" [:or :keyword :string]]
+   [:=> {:optional true} utils/malli:driver-spec]
+   ["=>" {:optional true} utils/malli:driver-spec]])
+
+(def ^:private -validator:command-mutation-str  (malli/validator -schema:command-mutation-str))
+(def ^:private -explainer:command-mutation-str  (malli/explainer -schema:command-mutation-str))
 
 (def ^{:doc "
   Description
@@ -339,19 +376,11 @@
                                    (contains? m "commando-mutation"))
                                  "The keyword :commando/mutation and the string \"commando-mutation\" cannot be used simultaneously in one command."
                                  (contains? m :commando/mutation)
-                                 (malli-error/humanize
-                                   (malli/explain
-                                     [:map [:commando/mutation [:or :keyword :string]]
-                                      [:=> {:optional true} utils/malli:driver-spec]
-                                      ["=>" {:optional true} utils/malli:driver-spec]]
-                                     m))
+                                 (when-not (-validator:command-mutation-kw m)
+                                   (malli-error/humanize (-explainer:command-mutation-kw m)))
                                  (contains? m "commando-mutation")
-                                 (malli-error/humanize
-                                   (malli/explain
-                                     [:map ["commando-mutation" [:or :keyword :string]]
-                                      [:=> {:optional true} utils/malli:driver-spec]
-                                      ["=>" {:optional true} utils/malli:driver-spec]]
-                                     m)))]
+                                 (when-not (-validator:command-mutation-str m)
+                                   (malli-error/humanize (-explainer:command-mutation-str m))))]
                            (if m-explain
                              m-explain
                              true)))
@@ -374,6 +403,24 @@
            (str utils/exception-message-header
              "command-macro. Undefinied '" undefinied-tx-type "'")
            {:commando/macro undefinied-tx-type})))
+
+(def ^:private -schema:command-macro-kw
+  [:map
+   [:commando/macro [:or :keyword :string]]
+   [:=> {:optional true} utils/malli:driver-spec]
+   ["=>" {:optional true} utils/malli:driver-spec]])
+
+(def ^:private -validator:command-macro-kw  (malli/validator -schema:command-macro-kw))
+(def ^:private -explainer:command-macro-kw  (malli/explainer -schema:command-macro-kw))
+
+(def ^:private -schema:command-macro-str
+  [:map
+   ["commando-macro" [:or :keyword :string]]
+   [:=> {:optional true} utils/malli:driver-spec]
+   ["=>" {:optional true} utils/malli:driver-spec]])
+
+(def ^:private -validator:command-macro-str  (malli/validator -schema:command-macro-str))
+(def ^:private -explainer:command-macro-str  (malli/explainer -schema:command-macro-str))
 
 (def ^{:doc "
   Description
@@ -474,29 +521,19 @@
                                    (contains? m "commando-macro"))
                                  "The keyword :commando/macro and the string \"commando-macro\" cannot be used simultaneously in one command."
                                  (contains? m :commando/macro)
-                                 (malli-error/humanize
-                                   (malli/explain
-                                     [:map
-                                      [:commando/macro [:or :keyword :string]]
-                                      [:=> {:optional true} utils/malli:driver-spec]
-                                      ["=>" {:optional true} utils/malli:driver-spec]]
-                                     m))
+                                 (when-not (-validator:command-macro-kw m)
+                                   (malli-error/humanize (-explainer:command-macro-kw m)))
                                  (contains? m "commando-macro")
-                                 (malli-error/humanize
-                                   (malli/explain
-                                     [:map
-                                      ["commando-macro" [:or :keyword :string]]
-                                      [:=> {:optional true} utils/malli:driver-spec]
-                                      ["=>" {:optional true} utils/malli:driver-spec]]
-                                     m)))]
+                                 (when-not (-validator:command-macro-str m)
+                                   (malli-error/humanize (-explainer:command-macro-str m))))]
                            (if m-explain
                              m-explain
                              true)))
    :apply (fn [_instruction _command-map m]
             (let [[macro-type macro-data]
                   (cond
-                    (get m :commando/macro) [(get m :commando/macro) (dissoc m :commando/macro)]
-                    (get m "commando-macro") [(get m "commando-macro") (dissoc m "commando-macro")])
+                    (contains? m :commando/macro) [(get m :commando/macro) (dissoc m :commando/macro)]
+                    (contains? m "commando-macro") [(get m "commando-macro") (dissoc m "commando-macro")])
                   result (commando/execute
                            (utils/command-map-spec-registry)
                            (command-macro macro-type macro-data))]

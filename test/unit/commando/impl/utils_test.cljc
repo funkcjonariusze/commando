@@ -84,8 +84,7 @@
               :data "{:level \"1\"}"})))
 
        (let [e (binding [sut/*execute-config*
-                         {:debug-result false
-                          :error-data-string false}]
+                         (sut/execute-config-update {:error-data-string false})]
                  (try
                    (malli/assert :int "string")
                    (catch Exception e
@@ -148,8 +147,7 @@
                 :data "{}"})))
 
        (let [e (binding [sut/*execute-config*
-                         {:debug-result false
-                          :error-data-string false}]
+                         (sut/execute-config-update {:error-data-string false})]
                  (try
                    (malli/assert :int "string")
                    (catch :default e

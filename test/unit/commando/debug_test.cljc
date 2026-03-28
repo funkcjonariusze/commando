@@ -131,14 +131,13 @@
   (testing "execute-trace with nested macro + mutation"
     (println "\n--- execute-trace: nested macro/mutation ---")
     (let [r (debug/execute-trace
-              #(commando/execute
-                 [builtin/command-fn-spec
-                  builtin/command-from-spec
-                  builtin/command-macro-spec
-                  builtin/command-mutation-spec]
-                 {:value {:commando/mutation :rand-n :v 200}
-                  :result {:commando/macro :sum-n
-                           :v {:commando/from [:value]}}}))]
+              [builtin/command-fn-spec
+               builtin/command-from-spec
+               builtin/command-macro-spec
+               builtin/command-mutation-spec]
+              {:value {:commando/mutation :rand-n :v 200}
+               :result {:commando/macro :sum-n
+                        :v {:commando/from [:value]}}})]
       (is (commando/ok? r)))))
 
 ;; ============================================================
@@ -172,19 +171,18 @@
   (testing "execute-trace with vector dot product macro"
     (println "\n--- execute-trace: vector dot product ---")
     (let [r (debug/execute-trace
-              #(commando/execute
-                 [builtin/command-macro-spec
-                  builtin/command-fn-spec
-                  builtin/command-from-spec
-                  builtin/command-apply-spec]
-                 {:vector-dot-1
-                  {:commando/macro :vector-dot-product
-                   :vector1-str ["1" "2" "3"]
-                   :vector2-str ["4" "5" "6"]}
-                  :vector-dot-2
-                  {:commando/macro :vector-dot-product
-                   :vector1-str ["10" "20" "30"]
-                   :vector2-str ["4" "5" "6"]}}))]
+              [builtin/command-macro-spec
+               builtin/command-fn-spec
+               builtin/command-from-spec
+               builtin/command-apply-spec]
+              {:vector-dot-1
+               {:commando/macro :vector-dot-product
+                :vector1-str ["1" "2" "3"]
+                :vector2-str ["4" "5" "6"]}
+               :vector-dot-2
+               {:commando/macro :vector-dot-product
+                :vector1-str ["10" "20" "30"]
+                :vector2-str ["4" "5" "6"]}})]
       (is (commando/ok? r))
       (is (= 32 (get-in (:instruction r) [:vector-dot-1])))
       (is (= 320 (get-in (:instruction r) [:vector-dot-2]))))))
