@@ -9,16 +9,16 @@
 ;; ------------------
 
 (def ^:private -execute-config-default
-  {:debug-result false
-   :error-data-string true
+  {:error-data-string true
    :hook-execute-end nil
    :hook-execute-start nil})
 
 (def ^:dynamic
   *execute-config*
   "Dynamic configuration for `commando/execute` behavior.
-  - `:debug-result` (boolean): When true, adds additional execution
-     information to the returned status-map, aiding in instruction analysis.
+  Bound automatically by `commando.core/execute` — prefer passing config
+  via the opts map to `execute` rather than binding directly.
+
   - `:error-data-string` (boolean): When true, the `:data` key in
      serialized `ExceptionInfo` (via `commando.impl.utils/serialize-exception`)
      will be a string representation of the data. When false, it will return
@@ -29,17 +29,15 @@
      passed in value.
 
   Example
-    (binding [commando.impl.utils/*execute-config*
-              {:debug-result true
-               :error-data-string false
-               :hook-execute-start (fn [e] (println (:uuid e)))
-               :hook-execute-end (fn [e] (println (:uuid e) (:stats e)))}]
-       (commando.core/execute
-         [commando.commands.builtin/command-from-spec]
-         {\"1\" 1
-          \"2\" {:commando/from [\"1\"]}
-          \"3\" {:commando/from [\"2\"]}}))"
-  -execute-config-default)
+    (commando.core/execute
+      [commando.commands.builtin/command-from-spec]
+      {\"1\" 1
+       \"2\" {:commando/from [\"1\"]}
+       \"3\" {:commando/from [\"2\"]}}
+      {:error-data-string false
+       :hook-execute-start (fn [e] (println (:uuid e)))
+       :hook-execute-end (fn [e] (println (:uuid e) (:stats e)))})"
+  nil)
 
 (def ^:dynamic
   *execute-internals*
@@ -62,10 +60,24 @@
     (assoc :uuid uuid-execute-identifier)
     (update :stack conj uuid-execute-identifier)))
 
+(def ^:private -config-keys
+  #{:error-data-string :hook-execute-start :hook-execute-end})
+
 (defn execute-config
-  "Returns the effective configuration for `commando/execute`, getting data from dynamic variable `commando.impl.utils/*execute-config*`"
+  "Returns the effective configuration for `commando/execute`.
+   Inside `execute` — returns the bound `*execute-config*`.
+   Outside — returns defaults."
   []
-  (merge -execute-config-default *execute-config*))
+  (or *execute-config* -execute-config-default))
+
+(defn execute-config-update
+  "Merges config-relevant keys from `opts` into the current
+   effective config. Non-config keys (e.g. `:previous`) are ignored."
+  [opts]
+  (let [overrides (select-keys opts -config-keys)]
+    (if (empty? overrides)
+      (execute-config)
+      (merge (execute-config) overrides))))
 
 (defn hook-process
   "Function will handle a hooks passed from users.

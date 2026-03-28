@@ -1,6 +1,4 @@
-(ns commando.impl.graph
-  (:require
-   [clojure.set :as set]))
+(ns commando.impl.graph)
 
 (defn topological-sort
   "Efficiently sorts a directed acyclic graph using Kahn's algorithm with in-degree counting.
@@ -9,26 +7,31 @@
    and :cyclic containing the remaining nodes if a cycle is detected."
   [g]
   (let [;; Build the reverse graph to easily find dependents and collect all nodes.
-        rev-g (reduce-kv (fn [acc k vs]
-                           (reduce (fn [a v] (update a v (fnil conj []) k)) acc vs))
-                {} g)
-        all-nodes (set/union (set (keys g)) (set (keys rev-g)))
+        rev-g (persistent!
+                (reduce-kv (fn [acc k vs]
+                             (reduce (fn [a v]
+                                       (let [existing (get a v [])]
+                                         (assoc! a v (conj existing k))))
+                               acc vs))
+                  (transient {}) g))
+        node-count (count g)
 
         ;; calculate in-degrees for all nodes.
-        in-degrees (reduce-kv (fn [acc node deps]
-                                (assoc acc node (count deps)))
-                     {} g)
+        in-degrees (persistent!
+                     (reduce-kv (fn [acc node deps]
+                                  (assoc! acc node (count deps)))
+                       (transient {}) g))
 
         ;; Initialize the queue with nodes that have no incoming edges.
         ;; Using a vector as a FIFO queue.
-        q (reduce (fn [queue node]
-                    (if (zero? (get in-degrees node 0))
-                      (conj queue node)
-                      queue))
-            [] all-nodes)]
+        q (reduce-kv (fn [queue node deps]
+                       (if (zero? (count deps))
+                         (conj queue node)
+                         queue))
+            [] g)]
     (loop [queue q
-           sorted-result []
-           degrees in-degrees]
+           sorted-result (transient [])
+           degrees (transient in-degrees)]
       (if-let [node (first queue)]
         (let [dependents (get rev-g node [])
               ;; Reduce in-degree for all dependents
@@ -36,17 +39,19 @@
               [next-degrees new-zero-nodes]
               (reduce (fn [[degs zeros] dep]
                         (let [new-degree (dec (get degs dep))]
-                          [(assoc degs dep new-degree)
+                          [(assoc! degs dep new-degree)
                            (if (zero? new-degree) (conj zeros dep) zeros)]))
                       [degrees []]
                       dependents)]
           (recur (into (subvec queue 1) new-zero-nodes)
-                 (conj sorted-result node)
+                 (conj! sorted-result node)
                  next-degrees))
-        (if (= (count sorted-result) (count all-nodes))
-          {:sorted sorted-result :cyclic {}}
-          (let [cyclic-nodes (->> degrees
-                                  (filter (fn [[_ v]] (pos? v)))
-                                  (into {}))]
-            {:sorted sorted-result :cyclic cyclic-nodes}))))))
+        (let [sorted (persistent! sorted-result)]
+          (if (= (count sorted) node-count)
+            {:sorted sorted :cyclic {}}
+            (let [final-degrees (persistent! degrees)
+                  cyclic-nodes (->> final-degrees
+                                    (filter (fn [[_ v]] (pos? v)))
+                                    (into {}))]
+              {:sorted sorted :cyclic cyclic-nodes})))))))
 

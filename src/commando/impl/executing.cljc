@@ -71,20 +71,27 @@
 
 (defn execute-commands
   "Execute commands in order, stopping on first failure.
-   Returns [updated-instruction error-info] where error-info is nil on success."
+   Returns [updated-instruction error-info cm-results].
+   Transient results map: avoids N persistent map copies during execution loop.
+   Each command adds one entry — transient turns N×assoc into N×assoc! (zero HAMT copies)."
   [instruction commands]
-  (loop [current-instruction instruction
-         remaining-commands commands]
-    (if (empty? remaining-commands)
-      [current-instruction nil]
-      (let [command (first remaining-commands)
-            execution-result (try (execute-single-command current-instruction command)
-                                  (catch #?(:clj Exception
-                                            :cljs :default)
-                                      e
-                                    {:error {:command-path (cm/command-path command)
-                                             :command-type (:type (cm/command-data command))
-                                             :original-error e}}))]
-        (if (:error execution-result)
-          [current-instruction (:error execution-result)]
-          (recur execution-result (rest remaining-commands)))))))
+  (let [cmd-count (count commands)]
+    (loop [current-instruction instruction
+           idx 0
+           results (transient {})]
+      (if (= idx cmd-count)
+        [current-instruction nil (persistent! results)]
+        (let [command      (nth commands idx)
+              command-path (cm/command-path command)
+              root?        (empty? command-path)
+              execution-result (try (execute-single-command current-instruction command)
+                                    (catch #?(:clj Exception
+                                              :cljs :default)
+                                        e
+                                      {:error {:command-path command-path
+                                               :command-type (:type (cm/command-data command))
+                                               :original-error e}}))]
+          (if (:error execution-result)
+            [current-instruction (:error execution-result) (persistent! results)]
+            (let [cmd-result (if root? execution-result (get-in execution-result command-path))]
+              (recur execution-result (inc idx) (assoc! results command cmd-result)))))))))

@@ -1,18 +1,84 @@
 # 1.1.1
 
-ADDED `commando.debug` namespace — new dedicated module for debug visualization. Provides two main entry points:
-- `execute-debug` — execute an instruction and visualize it in one of six display modes: `:tree`, `:table`, `:graph`, `:stats`, `:instr-before` / `:instr-after`. Supports combining multiple modes via a vector.
-- `execute-trace` — trace all nested `commando/execute` calls.
+## Breaking Changes
 
-REMOVED **BREAKING** `print-stats`, `print-trace` (`print-deep-stats`) from `commando.impl.utils`. These functions have been replaced by the richer `commando.debug` namespace.
+**BREAKING** `execute` accepts an optional third argument — a config map that replaces the old `binding`-based `*execute-config*` dynamic var for passing options. Users no longer need `(binding [utils/*execute-config* {...}] (execute ...))`.
+- `(execute registry instruction)` — unchanged
+- `(execute registry instruction {:error-data-string false})` — new opts map
+- Config keys: `:error-data-string`, `:hook-execute-start`, `:hook-execute-end`
+- Config is inherited by nested execute calls; inner calls can override specific keys.
 
-FIXED `crop-final-status-map` in `commando.core` — internal keys (`:internal/cm-list`, `:internal/cm-dependency`, `:internal/cm-running-order`, `:registry`) are now properly stripped from the result when `:debug-result` is not enabled.
+**BREAKING** `execute-trace` signature changed from `(execute-trace exec-fn)` to `(execute-trace registry instruction)` / `(execute-trace registry instruction opts)`. No longer requires wrapping in a zero-arg function.
 
-FIXED `execute-command-impl` in `commando.impl.executing` — added guard for non-map `command-data` before calling `dissoc` on driver keys (`:=>`, `"=>`), preventing errors when command data is a non-map value.
+**BREAKING** Removed `:debug-result` configuration option. Internal structures (`:internal/cm-list`, `:internal/cm-dependency`, `:internal/cm-running-order`, `:internal/path-trie`, `:internal/cm-results`, `:internal/original-instruction`, `:registry`) are now **always** retained in the status-map. If you relied on stripped status-maps, dissoc internal keys yourself.
 
-UPDATED documentation — restructured `README.md` with improved navigation, added "Managing the Registry" and "Debugging" sections. Moved doc files from `doc/` to `examples/` directory with richer, runnable code examples: `walkthrough.clj`, `integrant.clj`, `component.clj`, `json.clj`, `reitit.clj`, `reagent_front.cljs`.
+**BREAKING** Removed dependency modes `:all-inside-recur` and `:point-and-all-inside-recur`. Supported modes: `:point`, `:all-inside`, `:none`.
 
-UPDATED tests — split monolithic `core_test.cljc` into focused test namespaces: `dependency_test.cljc`, `finding_commands_test.cljc`, `graph_test.cljc`. Added `debug_test.cljc` for the new debug module. Updated performance tests.
+**BREAKING** Removed `print-stats`, `print-trace` (`print-deep-stats`) from `commando.impl.utils`. Replaced by `commando.debug` namespace.
+
+**BREAKING** `registry_test.clj` renamed to `registry_test.cljc` (cross-platform).
+
+## Added
+
+ADDED `commando.debug` namespace — dedicated module for debug visualization:
+- `execute-debug` — execute and visualize in one of six display modes: `:tree`, `:table`, `:graph`, `:stats`, `:instr-before` / `:instr-after`. Supports combining multiple modes via vector.
+- `execute-trace` — trace all nested `commando/execute` calls with timing and structure.
+
+ADDED `commando.impl.pathtrie` module — trie data structure for O(depth) command lookup by path. Built during the same traversal pass as command discovery, eliminating extra passes over the instruction tree.
+
+ADDED new status-map keys always present after execution:
+- `:internal/cm-results` — map `{CommandMapPath -> resolved-value}` with result of each command's `:apply` function.
+- `:internal/path-trie` — nested trie for efficient command lookup by path.
+- `:internal/original-instruction` — the original instruction before command evaluation.
+
+ADDED `structural-command-type?` and `structural-command-types` in `commando.impl.registry` for detecting internal structural commands (`:instruction/_value`, `:instruction/_map`, `:instruction/_vec`).
+
+## Performance
+
+OPTIMIZED `find-commands` BFS traversal in `commando.impl.finding_commands`:
+- Replaced vector-based queue with transient index-based queue (O(N) vs O(N^2) from subvec+into).
+- Transient set for found-commands accumulation.
+- Direct `enqueue-coll-children!` / `enqueue-command-children!` instead of intermediate mapv vectors.
+- Path-trie built in the same pass — no separate traversal needed.
+
+OPTIMIZED `execute-commands` in `commando.impl.executing`:
+- Transient results map avoids N persistent map copies during execution loop.
+- Index-based loop with `nth` instead of `rest`/`first` on remaining commands.
+
+OPTIMIZED `build-dependency-graph` in `commando.impl.dependency`:
+- Accepts pre-built path-trie from `find-commands` instead of rebuilding it.
+- Transient accumulation for forward dependency map.
+- `:all-inside` dependency resolution uses `reduce-kv` on trie subtree instead of dissoc+vals+keep+set chain.
+
+OPTIMIZED `topological-sort` in `commando.impl.graph`:
+- Transient maps during in-degree computation.
+- Transient queue for sorted result accumulation.
+
+OPTIMIZED `CommandMapPath` in `commando.impl.command_map`:
+- Hash computed once at construction time and cached.
+- `vector-starts-with?` uses indexed loop instead of lazy seq/take.
+
+OPTIMIZED Malli validation in `commando.commands.builtin`:
+- Pre-computed validators and explainers for each command spec.
+- Cached coercer for status-map messages. Avoids re-creating schemas on every call.
+
+## Fixed
+
+FIXED `execute-command-impl` in `commando.impl.executing` — guard for non-map `command-data` before calling `dissoc` on driver keys (`:=>`, `"=>`).
+
+FIXED point dependency errors in `commando.impl.dependency` now include `:command-path`, `:path`, and `:command` in error data.
+
+## Updated
+
+UPDATED `resolve-relative-path` in `commando.impl.dependency` — refactored from reduce to recursive loop for clarity and correct early termination.
+
+UPDATED `find-anchor-path` in `commando.impl.dependency` — refactored from reduce to loop.
+
+UPDATED documentation — restructured `README.md` with comprehensive status-map documentation, improved navigation, "Managing the Registry" and "Debugging" sections. Moved doc files to `examples/` with runnable code examples.
+
+UPDATED performance test alias from `:performance` to `:performance-core` in `deps.edn`.
+
+UPDATED tests — split monolithic `core_test.cljc` into focused namespaces: `dependency_test.cljc`, `finding_commands_test.cljc`, `graph_test.cljc`, `pathtrie_test.cljc`. Added `debug_test.cljc`. Converted `registry_test` to `.cljc` for cross-platform support.
 
 # 1.1.0
 

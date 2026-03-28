@@ -5,7 +5,6 @@
    [clojure.string              :as string]
    [commando.commands.builtin   :as command-builtin]
    [commando.commands.query-dsl :as command-query-dsl]
-   [commando.impl.utils         :as commando-utils]
    [commando.core               :as commando]
    [commando.test-helpers       :as helpers]))
 
@@ -514,16 +513,14 @@
 
     (is
       (helpers/status-map-contains-error?
-        (binding [commando-utils/*execute-config*
-                  {:debug-result false
-                   :error-data-string false}]
-          (commando/execute
+        (commando/execute
             registry
             {:commando/resolve :test-instruction-qe
              "commando-resolve" :test-instruction-qe
              :x 1
              :QueryExpression
-             [:string]}))
+             [:string]}
+            {:error-data-string false})
         (fn [error]
           (=
             (-> error :error :data)
@@ -568,16 +565,14 @@
     (is
       (helpers/status-map-contains-error?
         (get-in
-          (binding [commando-utils/*execute-config*
-                    {:debug-result false
-                     :error-data-string false}]
-            (commando/execute
+          (commando/execute
               registry
               {:commando/resolve :test-instruction-qe
                :x 20
                :QueryExpression
                [{:resolve-fn-error
-                 [:a]}]}))
+                 [:a]}]}
+              {:error-data-string false})
           [:instruction :resolve-fn-error])
         (fn [error]
           (=
@@ -591,16 +586,14 @@
     (is
       (helpers/status-map-contains-error?
         (get-in
-          (binding [commando-utils/*execute-config*
-                    {:debug-result false
-                     :error-data-string false}]
-            (commando/execute
+          (commando/execute
               registry
               {:commando/resolve :test-instruction-qe
                :x 20
                :QueryExpression
                [{:resolve-instruction-with-error
-                 [{:a [:b]}]}]}))
+                 [{:a [:b]}]}]}
+              {:error-data-string false})
           [:instruction :resolve-instruction-with-error])
         (fn [error]
           (=
