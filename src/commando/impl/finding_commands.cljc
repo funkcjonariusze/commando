@@ -92,7 +92,7 @@
          (let [current-path (nth queue idx)
                current-value (get-in instruction current-path)]
            (if-let [command-spec (instruction-command-spec registry-runtime current-value current-path)]
-             (let [command (cm/->CommandMapPath current-path command-spec)]
+             (let [command (cm/command-map-path current-path command-spec)]
                (recur (enqueue-command-children! queue command-spec current-value current-path)
                       (inc idx)
                       (conj! found-commands command)

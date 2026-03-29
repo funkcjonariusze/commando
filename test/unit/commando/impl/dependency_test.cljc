@@ -23,25 +23,25 @@
 
 ;; -- Command path objects --
 
-(def parent-cmd (cm/->CommandMapPath [:parent] test-add-id-command))
-(def child-cmd (cm/->CommandMapPath [:parent :child] test-add-id-command))
-(def target-cmd (cm/->CommandMapPath [:target] test-add-id-command))
-(def ref-cmd (cm/->CommandMapPath [:ref] cmds-builtin/command-from-spec))
+(def parent-cmd (cm/command-map-path [:parent] test-add-id-command))
+(def child-cmd (cm/command-map-path [:parent :child] test-add-id-command))
+(def target-cmd (cm/command-map-path [:target] test-add-id-command))
+(def ref-cmd (cm/command-map-path [:ref] cmds-builtin/command-from-spec))
 
-(def chain-cmd-a (cm/->CommandMapPath [:a] cmds-builtin/command-from-spec))
-(def chain-cmd-b (cm/->CommandMapPath [:b] cmds-builtin/command-from-spec))
-(def chain-cmd-c (cm/->CommandMapPath [:c] test-add-id-command))
+(def chain-cmd-a (cm/command-map-path [:a] cmds-builtin/command-from-spec))
+(def chain-cmd-b (cm/command-map-path [:b] cmds-builtin/command-from-spec))
+(def chain-cmd-c (cm/command-map-path [:c] test-add-id-command))
 
-(def diamond-cmd-a (cm/->CommandMapPath [:a] cmds-builtin/command-from-spec))
-(def diamond-cmd-b (cm/->CommandMapPath [:b] cmds-builtin/command-from-spec))
-(def diamond-cmd-c (cm/->CommandMapPath [:c] cmds-builtin/command-from-spec))
-(def diamond-cmd-d (cm/->CommandMapPath [:d] test-add-id-command))
+(def diamond-cmd-a (cm/command-map-path [:a] cmds-builtin/command-from-spec))
+(def diamond-cmd-b (cm/command-map-path [:b] cmds-builtin/command-from-spec))
+(def diamond-cmd-c (cm/command-map-path [:c] cmds-builtin/command-from-spec))
+(def diamond-cmd-d (cm/command-map-path [:d] test-add-id-command))
 
-(def deep-shallow (cm/->CommandMapPath [:deep :nested :cmd] cmds-builtin/command-from-spec))
-(def shallow-target (cm/->CommandMapPath [:target] test-add-id-command))
+(def deep-shallow (cm/command-map-path [:deep :nested :cmd] cmds-builtin/command-from-spec))
+(def shallow-target (cm/command-map-path [:target] test-add-id-command))
 
-(def sibling1 (cm/->CommandMapPath [:container :sib1] cmds-builtin/command-from-spec))
-(def sibling2 (cm/->CommandMapPath [:container :sib2] test-add-id-command))
+(def sibling1 (cm/command-map-path [:container :sib1] cmds-builtin/command-from-spec))
+(def sibling2 (cm/command-map-path [:container :sib2] test-add-id-command))
 
 ;; -- Status maps --
 
@@ -122,7 +122,7 @@
                            {:status :ok
                             :instruction {:ref {:commando/from [:nonexistent]}}
                             :registry registry
-                            :internal/cm-list [(cm/->CommandMapPath [:ref] cmds-builtin/command-from-spec)]}))
+                            :internal/cm-list [(cm/command-map-path [:ref] cmds-builtin/command-from-spec)]}))
         "Returns failed status for non-existent path references")
     (is (commando/ok? (#'commando/build-deps-tree empty-ok-status-map)) "Success status with empty command list"))
   (testing "Dependency patterns"
@@ -177,8 +177,8 @@
 
 (deftest dependency-modes-test
   (testing ":all-inside mode"
-    (let [goal2-cmd (cm/->CommandMapPath [:goal-2] test-add-id-command)
-          goal2-someval-cmd (cm/->CommandMapPath [:goal-2 :some-val] test-add-id-command)
+    (let [goal2-cmd (cm/command-map-path [:goal-2] test-add-id-command)
+          goal2-someval-cmd (cm/command-map-path [:goal-2 :some-val] test-add-id-command)
           test-status-map (status-map-with-trie
                             {:status :ok
                              :instruction {:goal-2 {:test/add-id :fn
@@ -191,8 +191,8 @@
       (is (contains? (get deps goal2-cmd) goal2-someval-cmd)
           "goal-2 command depends on goal-2.some-val command (nested inside)")))
   (testing ":point mode"
-    (let [goal1-cmd (cm/->CommandMapPath [:goal-1] test-add-id-command)
-          ref-cmd (cm/->CommandMapPath [:ref] cmds-builtin/command-from-spec)
+    (let [goal1-cmd (cm/command-map-path [:goal-1] test-add-id-command)
+          ref-cmd (cm/command-map-path [:ref] cmds-builtin/command-from-spec)
           test-status-map (status-map-with-trie
                             {:status :ok
                              :instruction {:goal-1 {:test/add-id :fn}
@@ -209,7 +209,7 @@
                         :recognize-fn #(and (map? %) (contains? % :test/none))
                         :apply identity
                         :dependencies {:mode :none}}
-          none-cmd (cm/->CommandMapPath [:standalone] none-command)
+          none-cmd (cm/command-map-path [:standalone] none-command)
           test-status-map (status-map-with-trie
                             {:status :ok
                              :instruction {:standalone {:test/none :independent}}

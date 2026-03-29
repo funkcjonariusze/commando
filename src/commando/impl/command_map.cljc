@@ -61,7 +61,7 @@
            (str (cm-generate-id path) (when-let [meta-info (cm-path-string-meta data)] (str "[" meta-info "]"))))))
 
 
-(defn ->CommandMapPath
+(defn command-map-path
   "Constructs a CommandMapPath with cached hash for fast map/set lookups."
   [path data]
   (CommandMapPath. path data (hash path)))

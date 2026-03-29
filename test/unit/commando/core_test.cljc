@@ -60,40 +60,40 @@
    :instruction {"val" 10
                  "cmd" {:test/add-id "data"}}
    :registry (commando/registry-create registry)
-   :internal/cm-running-order [(cm/->CommandMapPath ["cmd"] test-add-id-command)]})
+   :internal/cm-running-order [(cm/command-map-path ["cmd"] test-add-id-command)]})
 
 (def from-command
   {:status :ok
    :instruction {"source" 42
                  "ref" {:commando/from ["source"]}}
    :registry (commando/registry-create [cmds-builtin/command-from-spec])
-   :internal/cm-running-order [(cm/->CommandMapPath ["ref"] cmds-builtin/command-from-spec)]})
+   :internal/cm-running-order [(cm/command-map-path ["ref"] cmds-builtin/command-from-spec)]})
 
 (def fn-command
   {:status :ok
    :instruction {"calc" {:commando/fn +
                          :args [1 2 3]}}
    :registry (commando/registry-create [cmds-builtin/command-fn-spec])
-   :internal/cm-running-order [(cm/->CommandMapPath ["calc"] cmds-builtin/command-fn-spec)]})
+   :internal/cm-running-order [(cm/command-map-path ["calc"] cmds-builtin/command-fn-spec)]})
 
 (def apply-command
   {:status :ok
    :instruction {"transform" {:commando/apply {"data" 10}
                               :=> [:fn #(get % "data")]}}
    :registry (commando/registry-create [cmds-builtin/command-apply-spec])
-   :internal/cm-running-order [(cm/->CommandMapPath ["transform"] cmds-builtin/command-apply-spec)]})
+   :internal/cm-running-order [(cm/command-map-path ["transform"] cmds-builtin/command-apply-spec)]})
 
 (def nil-handler-execution-map
   {:status :ok
    :instruction {"nil-handler" {:handle-nil nil}}
    :registry (commando/registry-create [nil-handler-command])
-   :internal/cm-running-order [(cm/->CommandMapPath ["nil-handler"] nil-handler-command)]})
+   :internal/cm-running-order [(cm/command-map-path ["nil-handler"] nil-handler-command)]})
 
 (def bad-command-execution-map
   {:status :ok
    :instruction {"bad" {:will-fail true}}
    :registry (commando/registry-create [(:bad-cmd failing-commands)])
-   :internal/cm-running-order [(cm/->CommandMapPath ["bad"] (:bad-cmd failing-commands))]})
+   :internal/cm-running-order [(cm/command-map-path ["bad"] (:bad-cmd failing-commands))]})
 
 (def midway-fail-execution-map
   {:status :ok
@@ -102,18 +102,18 @@
                  "never" {:test/add-id "should-not-execute"}}
    :registry (commando/registry-create [test-add-id-command
                                         (:bad-cmd failing-commands)])
-   :internal/cm-running-order [(cm/->CommandMapPath ["good"] test-add-id-command)
-                               (cm/->CommandMapPath ["bad"] (:bad-cmd failing-commands))
-                               (cm/->CommandMapPath ["never"] test-add-id-command)]})
+   :internal/cm-running-order [(cm/command-map-path ["good"] test-add-id-command)
+                               (cm/command-map-path ["bad"] (:bad-cmd failing-commands))
+                               (cm/command-map-path ["never"] test-add-id-command)]})
 
 (def deep-nested-execution-map
   {:status :ok
    :instruction {"level1" {"level2" {"level3" {"deep" {:test/add-id "deep-value"}}}}}
    :registry (commando/registry-create [test-add-id-command])
-   :internal/cm-running-order [(cm/->CommandMapPath ["level1" "level2" "level3" "deep"] test-add-id-command)]})
+   :internal/cm-running-order [(cm/command-map-path ["level1" "level2" "level3" "deep"] test-add-id-command)]})
 
 (def large-commands-execution-map
-  (let [commands (mapv #(cm/->CommandMapPath [%] test-add-id-command) (range 20))
+  (let [commands (mapv #(cm/command-map-path [%] test-add-id-command) (range 20))
         instruction (into {} (map #(vector % {:test/add-id (str "value-" %)}) (range 20)))]
     {:status :ok
      :instruction instruction
