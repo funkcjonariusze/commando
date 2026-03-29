@@ -20,17 +20,17 @@
     (commando-registry/build)
     (commando-registry/enrich-runtime-registry)))
 
-(def chain-cmd-a (cm/->CommandMapPath [:a] cmds-builtin/command-from-spec))
-(def chain-cmd-b (cm/->CommandMapPath [:b] cmds-builtin/command-from-spec))
-(def chain-cmd-c (cm/->CommandMapPath [:c] test-add-id-command))
+(def chain-cmd-a (cm/command-map-path [:a] cmds-builtin/command-from-spec))
+(def chain-cmd-b (cm/command-map-path [:b] cmds-builtin/command-from-spec))
+(def chain-cmd-c (cm/command-map-path [:c] test-add-id-command))
 
-(def diamond-cmd-a (cm/->CommandMapPath [:a] cmds-builtin/command-from-spec))
-(def diamond-cmd-b (cm/->CommandMapPath [:b] cmds-builtin/command-from-spec))
-(def diamond-cmd-c (cm/->CommandMapPath [:c] cmds-builtin/command-from-spec))
-(def diamond-cmd-d (cm/->CommandMapPath [:d] test-add-id-command))
+(def diamond-cmd-a (cm/command-map-path [:a] cmds-builtin/command-from-spec))
+(def diamond-cmd-b (cm/command-map-path [:b] cmds-builtin/command-from-spec))
+(def diamond-cmd-c (cm/command-map-path [:c] cmds-builtin/command-from-spec))
+(def diamond-cmd-d (cm/command-map-path [:d] test-add-id-command))
 
-(def circular-cmd-a (cm/->CommandMapPath [:a] cmds-builtin/command-from-spec))
-(def circular-cmd-b (cm/->CommandMapPath [:b] cmds-builtin/command-from-spec))
+(def circular-cmd-a (cm/command-map-path [:a] cmds-builtin/command-from-spec))
+(def circular-cmd-b (cm/command-map-path [:b] cmds-builtin/command-from-spec))
 
 (deftest sort-entities-by-deps
   (testing "Status handling"
