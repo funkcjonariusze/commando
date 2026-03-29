@@ -11,10 +11,10 @@
 
 (deftest trie-operations-test
   (testing "Incremental trie update matches full rebuild"
-    (let [cmd-a (cm/->CommandMapPath [:a] {:type :test})
-          cmd-b (cm/->CommandMapPath [:b] {:type :test})
-          cmd-c (cm/->CommandMapPath [:c :d] {:type :test})
-          cmd-e (cm/->CommandMapPath [:a :x] {:type :test})
+    (let [cmd-a (cm/command-map-path [:a] {:type :test})
+          cmd-b (cm/command-map-path [:b] {:type :test})
+          cmd-c (cm/command-map-path [:c :d] {:type :test})
+          cmd-e (cm/command-map-path [:a :x] {:type :test})
           original-cmds [cmd-a cmd-b cmd-c]
           original-trie (pathtrie/build-path-trie original-cmds)
           ;; Remove :a subtree, insert cmd-e
