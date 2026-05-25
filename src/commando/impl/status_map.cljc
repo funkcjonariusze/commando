@@ -3,9 +3,7 @@
    [commando.impl.utils :as utils]
    [malli.core :as malli]))
 
-;;;------
-;;; Stats
-;;;------
+;; == Stats ================================================
 
 (defn status-map-add-measurement
   "Calculates the duration from `start-time-ns` and `end-time-ns` and appends it as a tuple
@@ -50,9 +48,7 @@
 
 (defn ok? [status-map] (= (:status status-map) :ok))
 
-;; --------------------
-;; Core Pipeline Helper
-;; --------------------
+;; == Core Pipeline Helper =================================
 
 (defn core-step-safe
   "Executes a pipeline step with skip-on-failure, error safety net, and timing.

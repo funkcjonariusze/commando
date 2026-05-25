@@ -4,9 +4,7 @@
 
 (def exception-message-header "Commando. ")
 
-;; ------------------
-;; Dynamic Properties
-;; ------------------
+;; == Dynamic Properties ==================================
 
 (def ^:private -execute-config-default
   {:error-data-string true
@@ -112,9 +110,7 @@
      `commando.core/execute-commands!`(binding)"
   [] (or *command-map-spec-registry* []))
 
-;; ------------------
-;; Function Resolvers
-;; ------------------
+;; == Function Resolvers ==================================
 
 (defn resolve-fn
   "Normalize `x` to a function (fn? x) => true.
@@ -176,9 +172,7 @@
     [:cat
      [:* malli:driver-step-spec]]]))
 
-;; -----------------
-;; Performance Tools
-;; -----------------
+;; == Performance Tools ===================================
 
 (defn now
   "Returns a high-resolution timestamp in nanoseconds."
@@ -195,9 +189,7 @@
     (< t 1000000000) (str (float (/ t 1000000)) "ms")
     :else (str (float (/ t 1000000000)) "s")))
 
-;; -----------
-;; Error Tools
-;; -----------
+;; == Error Tools ==========================================
 
 #?(:clj
    (defn stacktrace->vec-str [^Throwable t]
