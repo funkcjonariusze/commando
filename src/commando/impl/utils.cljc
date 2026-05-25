@@ -200,7 +200,7 @@
 ;; -----------
 
 #?(:clj
-   (defn ^:private stacktrace->vec-str [^Throwable t]
+   (defn stacktrace->vec-str [^Throwable t]
      (mapv (fn [^StackTraceElement ste]
              [(.getClassName ste)
               (.getMethodName ste)
@@ -208,7 +208,7 @@
               (.getLineNumber ste)])
        (.getStackTrace t))))
 
-#?(:clj (defn ^:private exception-dispatch-fn [e] (class e)))
+#?(:clj (defn exception-dispatch-fn [e] (class e)))
 
 #?(:clj (defmulti ^{:doc
              "Multimethod for serializing exceptions to maps.
