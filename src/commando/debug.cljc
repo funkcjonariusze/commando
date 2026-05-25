@@ -1,17 +1,5 @@
 (ns commando.debug
-  "Debug visualization tools for commando instruction execution.
-
-   Main entry points:
-     execute-debug — execute and visualize a single instruction
-     execute-trace — trace all nested execute calls with timing
-
-   Display modes for execute-debug / pprint-debug:
-     :tree         — enriched data flow tree with values (default)
-     :table        — tabular execution map (order, deps, results)
-     :graph        — compact dependency graph (structure only)
-     :stats        — execution statistics (timing, counts, errors)
-     :instr-before — wide pprint of the original instruction
-     :instr-after  — wide pprint of the executed instruction"
+  "Debug visualization tools for commando instruction execution."
   (:require
    [commando.core :as commando]
    [commando.impl.command-map :as cm]
@@ -19,9 +7,7 @@
    [clojure.string :as str]
    #?(:clj [clojure.pprint :as pp])))
 
-;; ============================================================
-;; Frame helpers
-;; ============================================================
+;; == Frame helpers =======================================
 
 (def ^:private frame-width 60)
 
@@ -35,13 +21,10 @@
 (defn ^:private frame-bottom []
   (println (str/join (repeat frame-width "─"))))
 
-;; ============================================================
-;; Shared helpers
-;; ============================================================
+
+;; == Shared helpers ======================================
 
 (defn ^:private top-level-cmd?
-  "Is this command a top-level instruction key (path length = 1)?
-   Filters out nested/internal commands like [:ACCOUNT-1-1 :from]."
   [cmd]
   (= 1 (count (cm/command-path cmd))))
 
@@ -54,14 +37,12 @@
 (defn ^:private pprint-wide
   [data]
   #?(:clj  (binding [pp/*print-right-margin* pprint-width
-                      *print-namespace-maps* false]
+                     *print-namespace-maps* false]
              (pp/pprint data))
      :cljs (println (pr-str data))))
 
 
-;; ============================================================
-;; Command description (for pprint-debug modes)
-;; ============================================================
+;; == Command description =================================
 
 (defn ^:private describe-driver
   [command-data]
@@ -149,13 +130,10 @@
   [key-name desc]
   (format-node-label key-name desc nil false))
 
-;; ============================================================
-;; Graph building
-;; ============================================================
+
+;; == Graph building ======================================
 
 (defn ^:private resolve-top-deps
-  "Given a command and its dependency map, resolve transitive deps
-   to only include top-level commands."
   [cmd cm-dependency top-cmds]
   (loop [frontier (get cm-dependency cmd #{})
          visited  #{}
@@ -169,8 +147,8 @@
           (if (contains? top-cmds node)
             (recur frontier (conj visited node) (conj result node))
             (recur (into frontier (get cm-dependency node #{}))
-                   (conj visited node)
-                   result)))))))
+              (conj visited node)
+              result)))))))
 
 (defn ^:private build-simplified-graph
   [cm-dependency cm-running-order]
@@ -182,11 +160,11 @@
         (reduce-kv
           (fn [acc cmd cmd-deps]
             (reduce (fn [a dep] (update a dep (fnil conj #{}) cmd))
-                    acc cmd-deps))
+              acc cmd-deps))
           {} simplified-deps)
         order-index (into {} (map-indexed (fn [i c] [c i]) cm-running-order))
         top-order   (sort-by #(get order-index % 999)
-                             (filter top-level-cmd? cm-running-order))
+                      (filter top-level-cmd? cm-running-order))
         roots       (filterv #(empty? (get simplified-deps % #{})) top-order)
         sorted-dependents
         (reduce-kv
@@ -205,16 +183,16 @@
         visible-deps
         (into {} (map (fn [cmd]
                         [cmd (set (filter visible (get cm-dependency cmd #{})))])
-                      visible))
+                   visible))
         dependents
         (reduce-kv
           (fn [acc cmd cmd-deps]
             (reduce (fn [a dep] (update a dep (fnil conj #{}) cmd))
-                    acc cmd-deps))
+              acc cmd-deps))
           {} visible-deps)
         order-index (into {} (map-indexed (fn [i c] [c i]) cm-running-order))
         visible-order (sort-by #(get order-index % 999)
-                               (filter non-root? cm-running-order))
+                        (filter non-root? cm-running-order))
         roots (filterv #(empty? (get visible-deps % #{})) visible-order)
         sorted-dependents
         (reduce-kv
@@ -226,9 +204,10 @@
      :roots      roots
      :order      (vec visible-order)}))
 
-;; ============================================================
-;; Mode: :tree
-;; ============================================================
+
+;; == Modes ===============================================
+
+;; -- :tree --
 
 (defn ^:private pprint-tree
   [result original-instruction]
@@ -272,9 +251,8 @@
             (println)))))
     (frame-bottom)))
 
-;; ============================================================
-;; Mode: :table
-;; ============================================================
+
+;; -- :table --
 
 (defn ^:private pprint-table-mode
   [result original-instruction]
@@ -296,10 +274,10 @@
                                  (let [dp (cm/command-path dep)
                                        dep-orig (get-in original-instruction dp)]
                                    (or (top-level-cmd? dep)
-                                       (and (map? dep-orig)
-                                            (or (contains? dep-orig :commando/from)
-                                                (contains? dep-orig "commando-from"))))))
-                               dep-keys)
+                                     (and (map? dep-orig)
+                                       (or (contains? dep-orig :commando/from)
+                                         (contains? dep-orig "commando-from"))))))
+                         dep-keys)
                        dep-str  (if (empty? meaningful-deps)
                                   "—"
                                   (str/join ", " (map #(format-path-name (cm/command-path %)) meaningful-deps)))]
@@ -308,7 +286,7 @@
                     :type      (str (case (:kind desc)
                                       :from (str "← " (:source desc))
                                       (:label desc))
-                                    (format-driver-suffix desc))
+                                 (format-driver-suffix desc))
                     :deps      dep-str
                     :value     (if has-value? (pr-str value) "—")}))
                order)
@@ -320,34 +298,33 @@
         pad    (fn [s w] (str s (str/join (repeat (max 0 (- w (count s))) " "))))
         pad-r  (fn [s w] (str (str/join (repeat (max 0 (- w (count s))) " ")) s))
         hr     (fn [j] (str " " (str/join (repeat w-n "─"))
-                            " " j " " (str/join (repeat w-key "─"))
-                            " " j " " (str/join (repeat w-type "─"))
-                            " " j " " (str/join (repeat w-deps "─"))
-                            " " j " " (str/join (repeat w-val "─"))
-                            " "))]
+                        " " j " " (str/join (repeat w-key "─"))
+                        " " j " " (str/join (repeat w-type "─"))
+                        " " j " " (str/join (repeat w-deps "─"))
+                        " " j " " (str/join (repeat w-val "─"))
+                        " "))]
     (frame-top "Execution Map")
     (println (hr "┬"))
     (println (str " " (pad-r "#" w-n)
-                  " │ " (pad "key" w-key)
-                  " │ " (pad "type" w-type)
-                  " │ " (pad "depends on" w-deps)
-                  " │ " "value"))
+               " │ " (pad "key" w-key)
+               " │ " (pad "type" w-type)
+               " │ " (pad "depends on" w-deps)
+               " │ " "value"))
     (println (hr "┼"))
     (doseq [row rows]
       (println (str " " (pad-r (str (:n row)) w-n)
-                    " │ " (pad (:key row) w-key)
-                    " │ " (pad (:type row) w-type)
-                    " │ " (pad (:deps row) w-deps)
-                    " │ " (let [v (:value row)]
-                             (if (> (count v) w-val)
-                               (str (subs v 0 (- w-val 1)) "…")
-                               v)))))
+                 " │ " (pad (:key row) w-key)
+                 " │ " (pad (:type row) w-type)
+                 " │ " (pad (:deps row) w-deps)
+                 " │ " (let [v (:value row)]
+                         (if (> (count v) w-val)
+                           (str (subs v 0 (- w-val 1)) "…")
+                           v)))))
     (println (hr "┴"))
     (frame-bottom)))
 
-;; ============================================================
-;; Mode: :graph
-;; ============================================================
+
+;; -- :graph --
 
 (defn ^:private pprint-graph-mode
   [result original-instruction]
@@ -364,8 +341,8 @@
                           desc (cmd-describe (if (map? orig) orig {}))
                           kids (get dependents cmd [])]
                       (str (format-node-label-no-value (fmt-key cmd) desc)
-                           (when (seq kids)
-                             (str " ──► " (str/join ", " (map fmt-key kids)))))))]
+                        (when (seq kids)
+                          (str " ──► " (str/join ", " (map fmt-key kids)))))))]
     (frame-top "Dependency Graph")
     (when (seq roots)
       (println "  Sources (no dependencies):")
@@ -382,9 +359,8 @@
       (println (str "    " (str/join ", " (map fmt-key sinks)))))
     (frame-bottom)))
 
-;; ============================================================
-;; Mode: :stats
-;; ============================================================
+
+;; -- :stats --
 
 (defn ^:private pprint-stats-mode
   [result _original-instruction]
@@ -395,7 +371,7 @@
         stats   (:stats result)]
     (frame-top "Stats")
     (println (str "  Keys: " top-n " · Commands: " total-n " · Errors: " errors
-                  " · Status: " (name (:status result))))
+               " · Status: " (name (:status result))))
     (when (seq stats)
       (let [max-key-len (apply max 0 (map (comp count name first) stats))]
         (println)
@@ -403,7 +379,7 @@
           (let [key-str (name stat-key)
                 padding (str/join (repeat (- max-key-len (count key-str)) " "))]
             (println (str "  " (if (= "execute" key-str) "=" (str (inc index)))
-                         "  " key-str " " padding formatted))))))
+                       "  " key-str " " padding formatted))))))
     (when (seq (:errors result))
       (println)
       (println "  Errors:")
@@ -411,9 +387,8 @@
         (println (str "    · " (pr-str err)))))
     (frame-bottom)))
 
-;; ============================================================
-;; Mode: :instr-before / :instr-after
-;; ============================================================
+
+;; -- :instr-before / :instr-after --
 
 (defn ^:private pprint-instr-before
   [_result original-instruction]
@@ -427,11 +402,10 @@
   (pprint-wide (:instruction result))
   (frame-bottom))
 
-;; ============================================================
-;; pprint-debug / execute-debug
-;; ============================================================
 
-(defn ^:private pprint-single-mode
+;; == execute-debug =======================================
+
+(defn ^:private render-mode
   [mode result original-instruction]
   (case mode
     :tree         (pprint-tree result original-instruction)
@@ -440,93 +414,63 @@
     :stats        (pprint-stats-mode result original-instruction)
     :instr-before (pprint-instr-before result original-instruction)
     :instr-after  (pprint-instr-after result original-instruction)
-    (throw (ex-info (str "Unknown pprint-debug mode: " mode)
-                    {:mode mode
-                     :available [:tree :table :graph :stats :instr-before :instr-after]}))))
-
-(defn ^:private pprint-debug
-  "Pretty-print execution debug info.
-
-   Accepts a single mode keyword or a vector of modes to combine.
-
-   Modes:
-     :table        — tabular execution map (order, deps, results) (default)
-     :tree         — enriched data flow tree with values
-     :graph        — compact dependency graph (structure only)
-     :stats        — execution statistics (timing, counts, errors)
-     :instr-before — wide pprint of the original instruction
-     :instr-after  — wide pprint of the executed instruction
-
-   Usage:
-     (pprint-debug result instruction)
-     (pprint-debug result instruction :table)
-     (pprint-debug result instruction [:instr-before :table :stats])"
-  ([result original-instruction]
-   (pprint-debug result original-instruction :table))
-  ([result original-instruction mode]
-   (if (vector? mode)
-     (doseq [m mode]
-       (pprint-single-mode m result original-instruction))
-     (pprint-single-mode mode result original-instruction))))
+    (throw (ex-info (str "Unknown execute-debug mode: " mode)
+             {:mode mode
+              :available [:tree :table :graph :stats :instr-before :instr-after]}))))
 
 (defn execute-debug
-  "Execute an instruction with debug enabled, print with pprint-debug.
-   Returns the execution result.
+  "Execute an instruction and print debug visualization. Returns the execution result.
 
-   Accepts a single mode keyword or a vector of modes.
+   Accepts a single mode keyword or a vector of modes (printed in order).
+
+   Modes:
+     :table        — tabular execution map: order, type, deps, result value (default)
+     :tree         — data flow tree with resolved values at each node
+     :graph        — compact dependency graph showing structure only
+     :stats        — execution statistics: timing, command counts, errors
+     :instr-before — wide pprint of the original instruction (before execution)
+     :instr-after  — wide pprint of the instruction after execution
 
    Usage:
      (execute-debug registry instruction)
-     (execute-debug registry instruction :table)
-     (execute-debug registry instruction [:instr-before :tree :stats])
+     (execute-debug registry instruction :tree)
+     (execute-debug registry instruction [:instr-before :table :stats])
 
    Example:
-     (require '[commando.commands.builtin :as builtin])
-
      (execute-debug
        [builtin/command-from-spec]
        {:a 1 :b {:commando/from [:a] :=> [:fn inc]}}
-       :table)"
+       [:instr-before :table :stats])"
   ([registry instruction]
    (execute-debug registry instruction :table))
   ([registry instruction mode]
    (let [result (commando/execute registry instruction)]
-     (pprint-debug result instruction mode)
+     (if (vector? mode)
+       (doseq [m mode] (render-mode m result instruction))
+       (render-mode mode result instruction))
      result)))
 
-;; ============================================================
-;; execute-trace — trace nested execute calls
-;; ============================================================
-;;
-;; Wraps an execution function and prints a tree of all nested
-;; commando/execute calls with timing stats, instruction keys,
-;; and optional titles.
-;;
-;; ============================================================
+;; == execute-trace ======================================= 
 
 (defn ^:private trace-extract-children
-  "Extract child execution entries from trace data.
-   Children are map-valued entries that are not known metadata keys."
   [data]
   (into []
     (keep (fn [[k v]]
             (when (and (map? v)
-                       (not (contains? #{:stats :instruction-keys :instruction-title} k)))
+                    (not (contains? #{:stats :instruction-keys :instruction-title} k)))
               [k v])))
     data))
 
 (defn ^:private trace-format-keys
-  "Format instruction keys for compact display."
   [keys-vec]
   (let [ks (keep (fn [k] (when-not (contains? #{"__title" :__title} k) (str k)))
-                 keys-vec)]
+             keys-vec)]
     (when (seq ks)
       (let [display (take 5 ks)]
         (cond-> (str/join ", " display)
           (> (count ks) 5) (str ", …"))))))
 
 (defn ^:private trace-format-summary
-  "Format a compact one-line summary with only execute-commands! and execute times."
   [stats]
   (when (seq stats)
     (let [stats-map (into {} (map (fn [[k _ formatted]] [(name k) formatted]) stats))
@@ -539,7 +483,6 @@
         :else               nil))))
 
 (defn ^:private trace-print-node
-  "Print a child execution node with tree connectors."
   [uuid data prefix is-last]
   (let [short-id    (subs (str uuid) 0 (min 8 (count (str uuid))))
         title       (:instruction-title data)
@@ -562,7 +505,6 @@
         (trace-print-node cuuid cdata new-prefix (= i (dec (count cv))))))))
 
 (defn ^:private trace-print
-  "Print the full execution trace tree."
   [data]
   (let [roots (trace-extract-children data)]
     (frame-top "Execution Trace")

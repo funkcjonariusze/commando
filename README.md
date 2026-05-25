@@ -710,16 +710,16 @@ The `commando.debug` namespace provides two main functions for inspecting instru
 
 **`execute-debug`**
 
-Executes an instruction with debug enabled and prints a visual representation. Accepts a display mode (default `:tree`):
+Executes an instruction with debug enabled and prints a visual representation. Accepts a display mode (default `:table`):
 
 ```clojure
 (require '[commando.debug :as debug])
 
-;; Default :table mode — shows data flow with values
+;; Default :table mode — tabular execution map with order, type, deps, values
 (debug/execute-debug registry instruction)
 
 ;; Other modes: :table, :tree, :graph, :stats, :instr-before, :instr-after
-(debug/execute-debug registry instruction :table)
+(debug/execute-debug registry instruction :tree)
 
 ;; Combine multiple modes in one printing
 (debug/execute-debug registry instruction [:instr-before :table :instr-after :stats])
@@ -727,11 +727,13 @@ Executes an instruction with debug enabled and prints a visual representation. A
 
 **`execute-trace`**
 
-Traces all nested `commando/execute` calls (including recursive calls from macros/mutations) with timing. Wraps execution in a zero-argument function:
+Traces all nested `commando/execute` calls (including recursive calls from macros/mutations) with timing:
 
 ```clojure
-(debug/execute-trace
-  #(commando/execute registry instruction))
+(debug/execute-trace registry instruction)
+
+;; With opts
+(debug/execute-trace registry instruction {:error-data-string false})
 ```
 
 Add `:__title` (or `"__title"`) to an instruction to label it in the trace output.

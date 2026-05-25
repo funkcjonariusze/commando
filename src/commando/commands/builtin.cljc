@@ -6,9 +6,7 @@
    [malli.core               :as malli]
    [malli.error              :as malli-error]))
 
-;; ======================
-;; Fn
-;; ======================
+;; == Fn ===================================================
 
 (def ^:private -schema:command-fn
   [:map
@@ -58,9 +56,7 @@
                   result (apply m-fn m-args)] result))
    :dependencies {:mode :all-inside}})
 
-;; ======================
-;; Apply
-;; ======================
+;; == Apply ================================================
 
 (def ^:private -schema:command-apply
   [:map
@@ -98,9 +94,7 @@
             (:commando/apply command-map))
    :dependencies {:mode :all-inside}})
 
-;; ======================
-;; From
-;; ======================
+;; == From =================================================
 
 (def ^:private -malli:commando-from-path
   (malli/deref
@@ -202,9 +196,7 @@
                   :point-key [:commando/from
                               "commando-from"]}})
 
-;; ======================
-;; Context
-;; ======================
+;; == Context ==============================================
 
 (def ^:private -schema:command-context-kw
   [:map
@@ -291,9 +283,7 @@
        (get-in ctx path nil)))
    :dependencies {:mode :none}})
 
-;; ======================
-;; Mutation
-;; ======================
+;; == Mutation =============================================
 
 (defmulti command-mutation (fn [tx-type _data] tx-type))
 (defmethod command-mutation :default
@@ -392,9 +382,7 @@
               (command-mutation (get m "commando-mutation") (dissoc m "commando-mutation"))))
    :dependencies {:mode :all-inside}})
 
-;; ======================
-;; Macro
-;; ======================
+;; == Macro ================================================
 
 (defmulti command-macro (fn [tx-type _data] tx-type))
 (defmethod command-macro :default

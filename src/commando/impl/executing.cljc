@@ -2,9 +2,7 @@
   (:require
    [commando.impl.command-map :as cm]))
 
-;; ====================
-;; Driver Multimethod
-;; ====================
+;; == Driver Multimethod ==================================
 
 (defn ^:private resolve-command-driver
   "Parses :=> value into [driver-keyword driver-params].
@@ -46,9 +44,7 @@
   (fn [driver-name _driver-params _applied-result _command-data _instruction _command-path-obj]
     driver-name))
 
-;; ====================
-;; Execution Engine
-;; ====================
+;; == Execution Engine =====================================
 
 (defn ^:private execute-single-command
   "Execute a single command and update the instruction at the given path.

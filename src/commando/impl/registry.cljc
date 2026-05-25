@@ -123,9 +123,7 @@
               acc (conj acc command-map)))
     [] cm-vector))
 
-;; ----------------
-;; Registry Helpers
-;; ----------------
+;; == Registry Helpers =====================================
 
 (defn registry-add
   "Adds or replaces a spec in a built registry (identified by :type). Revalidates."
