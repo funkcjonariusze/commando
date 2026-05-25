@@ -1,4 +1,4 @@
-# 1.1.1
+# 1.2.0
 
 ## Breaking Changes
 
@@ -56,7 +56,7 @@ OPTIMIZED `topological-sort` in `commando.impl.graph`:
 
 OPTIMIZED `CommandMapPath` in `commando.impl.command_map`:
 - Hash computed once at construction time and cached.
-- `vector-starts-with?` uses indexed loop instead of lazy seq/take.
+- `coll-starts-with?` uses indexed loop instead of lazy seq/take.
 
 OPTIMIZED Malli validation in `commando.commands.builtin`:
 - Pre-computed validators and explainers for each command spec.
@@ -64,7 +64,7 @@ OPTIMIZED Malli validation in `commando.commands.builtin`:
 
 ## Fixed
 
-FIXED `execute-command-impl` in `commando.impl.executing` — guard for non-map `command-data` before calling `dissoc` on driver keys (`:=>`, `"=>`).
+FIXED `execute-single-command` in `commando.impl.executing` — guard for non-map `command-data` before calling `dissoc` on driver keys (`:=>`, `"=>`).
 
 FIXED point dependency errors in `commando.impl.dependency` now include `:command-path`, `:path`, and `:command` in error data.
 
@@ -76,9 +76,10 @@ UPDATED `find-anchor-path` in `commando.impl.dependency` — refactored from red
 
 UPDATED documentation — restructured `README.md` with comprehensive status-map documentation, improved navigation, "Managing the Registry" and "Debugging" sections. Moved doc files to `examples/` with runnable code examples.
 
-UPDATED performance test alias from `:performance` to `:performance-core` in `deps.edn`.
+UPDATED performance test alias from `:performance` to `:clj-test-perf-execute` in `deps.edn`.
 
 UPDATED tests — split monolithic `core_test.cljc` into focused namespaces: `dependency_test.cljc`, `finding_commands_test.cljc`, `graph_test.cljc`, `pathtrie_test.cljc`. Added `debug_test.cljc`. Converted `registry_test` to `.cljc` for cross-platform support.
+
 
 # 1.1.0
 
