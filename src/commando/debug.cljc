@@ -462,7 +462,7 @@
      (pprint-debug result instruction :table)
      (pprint-debug result instruction [:instr-before :table :stats])"
   ([result original-instruction]
-   (pprint-debug result original-instruction :tree))
+   (pprint-debug result original-instruction :table))
   ([result original-instruction mode]
    (if (vector? mode)
      (doseq [m mode]

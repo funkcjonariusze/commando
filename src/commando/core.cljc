@@ -152,25 +152,6 @@
       (update :internal/cm-running-order registry/remove-runtime-registry-commands-from-command-list)
       (update :registry registry/reset-runtime-registry))))
 
-;; -- Full Execute (internal) --
-
-(defn- full-execute
-  "Full execution pipeline. Always retains internal structures."
-  [registry instruction]
-  (let [start-time (utils/now)
-        config (utils/execute-config)]
-    (-> (smap/status-map-pure {:instruction instruction})
-      (utils/hook-process (:hook-execute-start config))
-      (use-registry registry)
-      (find-commands)
-      (build-deps-tree)
-      (sort-commands-by-deps)
-      (prepare-execution-status-map)
-      (execute-commands!)
-      (smap/status-map-add-measurement "execute" start-time (utils/now))
-      (utils/hook-process (:hook-execute-end config))
-      (assoc :internal/original-instruction instruction))))
-
 ;; -- Public API --
 
 (defn failed? [status-map] (smap/failed? status-map))
@@ -198,5 +179,17 @@
    {:pre [(or (vector? registry) (registry/built? registry))]}
    (binding [utils/*execute-internals* (utils/-execute-internals-push (str (random-uuid)))
              utils/*execute-config*    (utils/execute-config-update opts)]
-     (full-execute registry instruction))))
+     (let [start-time (utils/now)
+           config     (utils/execute-config)]
+       (-> (smap/status-map-pure {:instruction instruction})
+         (utils/hook-process (:hook-execute-start config))
+         (use-registry registry)
+         (find-commands)
+         (build-deps-tree)
+         (sort-commands-by-deps)
+         (prepare-execution-status-map)
+         (execute-commands!)
+         (smap/status-map-add-measurement "execute" start-time (utils/now))
+         (utils/hook-process (:hook-execute-end config))
+         (assoc :internal/original-instruction instruction))))))
 

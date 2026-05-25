@@ -71,26 +71,34 @@
 (defn command-path [p] (when (instance? CommandMapPath p) (.-path p)))
 (defn command-data [p] (when (instance? CommandMapPath p) (.-data p)))
 
-(defn vector-starts-with?
-  "Checks if vector `s` starts with all elements of `prefix`.
-   Uses indexed loop instead of seq/take to avoid lazy sequence allocation per call."
-  [s prefix]
-  (if (or (nil? s) (nil? prefix))
+(defn coll-starts-with?
+  "Returns true if `coll` starts with all elements of `coll-prefix`, in order.
+   Works on any indexed, counted collection (vectors, arrays, strings).
+   Uses indexed loop instead of seq/take to avoid lazy sequence allocation.
+
+   Examples:
+     (coll-starts-with? [:a :b :c] [:a :b])        ;=> true
+     (coll-starts-with? [:a :b :c] [:a :x])        ;=> false
+     (coll-starts-with? [:a :b :c] [:a :b :c :d])  ;=> false
+     (coll-starts-with? [:a :b] [])                ;=> true
+     (coll-starts-with? nil [:a])                  ;=> false"
+  [coll coll-prefix]
+  (if (or (nil? coll) (nil? coll-prefix))
     false
-    (let [s-len (count s)
-          prefix-len (count prefix)]
+    (let [coll-len (count coll)
+          prefix-len (count coll-prefix)]
       (if (= prefix-len 0)
         true
-        (if (< s-len prefix-len)
+        (if (< coll-len prefix-len)
           false
           (loop [i 0]
             (if (= i prefix-len)
               true
-              (if (= (nth s i) (nth prefix i))
+              (if (= (nth coll i) (nth coll-prefix i))
                 (recur (inc i))
                 false))))))))
 
-(defn start-with? [p1 p2] (vector-starts-with? (command-path p1) (command-path p2)))
+(defn start-with? [p1 p2] (coll-starts-with? (command-path p1) (command-path p2)))
 
 (def CommandMapSpec
   (malli/schema [:map
