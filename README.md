@@ -4,7 +4,7 @@
 
 [![Clojars Project](https://img.shields.io/clojars/v/org.clojars.funkcjonariusze/commando.svg)](https://clojars.org/org.clojars.funkcjonariusze/commando)
 [![Run tests](https://github.com/funkcjonariusze/commando/actions/workflows/unit_test.yml/badge.svg)](https://github.com/funkcjonariusze/commando/actions/workflows/unit_test.yml)
-[![cljdoc badge](https://cljdoc.org/badge/org.clojars.funkcjonariusze/commando)](https://cljdoc.org/d/org.clojars.funkcjonariusze/commando/1.2.0)
+[![cljdoc badge](https://cljdoc.org/badge/org.clojars.funkcjonariusze/commando)](https://cljdoc.org/d/org.clojars.funkcjonariusze/commando/1.2.1)
 
 **Commando** is a flexible Clojure/ClojureScript library for building data-driven DSLs.
 
@@ -21,6 +21,7 @@
     - [command-mutation-spec](#command-mutation-spec)
     - [command-macro-spec](#command-macro-spec)
     - [command-context-spec](#command-context-spec)
+    - [command-quote-spec](#command-quote-spec)
   - [Drivers (Post-Processing)](#drivers-post-processing)
     - [Built-in Drivers](#built-in-drivers)
     - [Pipeline](#pipeline)
@@ -40,10 +41,10 @@
 
 ```clojure
 ;; deps.edn with git
-{org.clojars.funkcjonariusze/commando {:mvn/version "1.2.0"}}
+{org.clojars.funkcjonariusze/commando {:mvn/version "1.2.1"}}
 
 ;; leiningen
-[org.clojars.funkcjonariusze/commando "1.2.0"]
+[org.clojars.funkcjonariusze/commando "1.2.1"]
 ```
 
 ## Quick Start
@@ -400,6 +401,37 @@ Injects external reference data (dictionaries, config, feature flags) into instr
 ```
 
 Missing path returns `nil`; use `:default` for an explicit fallback. Use `:=>` driver for post-processing the resolved value, same as in `:commando/from`. String-key form (`"commando-context"`, `"default"`, `"=>"`) is available for JSON compatibility.
+
+#### command-quote-spec
+
+**Lisp-style quasiquote** for instructions. A `:commando/quote` body is treated as **inert data** — commands inside it are not executed and the scanner stops descending — *except* inside `:commando/unquote` holes, which *are* executed and spliced back into the body.
+
+```
+  {:commando/quote                       ◄── "everything below is data..."
+   {:kept   {:commando/from [:x]}        ◄──   ...left untouched
+    :filled {:commando/unquote CMD}}}    ◄── "...except here — run CMD, paste result"
+```
+
+Reach for it when an instruction must *carry* another instruction as payload instead of evaluating it now: templates, examples, or config forwarded to a later `execute`.
+
+```clojure
+(commando/execute
+  [commands-builtin/command-quote-spec
+   commands-builtin/command-fn-spec]
+  {:tmpl {:commando/quote
+          {:kept   {:commando/from [:NO :SUCH :PATH]}   ; inert — returned verbatim
+           :filled {:commando/unquote
+                    {:commando/fn (constantly 42)}}}}}) ; hole — evaluated
+;; => {:tmpl {:kept {:commando/from [:NO :SUCH :PATH]}, :filled 42}}
+```
+
+Notes:
+- A command inside an `:commando/unquote` resolves against the *whole* instruction, so holes can reference values outside the quote.
+- A nested `:commando/quote` (and its wrapper) stays fully inert, so quotes nest safely.
+- `:commando/unquote` is **pure syntax**, not a registered command — it only means something inside a quote.
+- String-key forms `"commando-quote"` / `"commando-unquote"` are supported for JSON compatibility.
+
+See [`examples/walkthrough.clj`](./examples/walkthrough.clj) for a step-by-step tour.
 
 ### Drivers (Post-Processing)
 

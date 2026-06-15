@@ -80,7 +80,7 @@
 ;; │ 3. BUILTIN COMMANDS                                 │
 ;; └─────────────────────────────────────────────────────┘
 ;;
-;; Commando ships with six commands. Each one is a
+;; Commando ships with a handful of commands. Each one is a
 ;; CommandMapSpec — a config map that describes how to
 ;; recognize, validate, and execute a command type.
 
@@ -262,6 +262,57 @@
    {:a {:commando/macro :double :value 5}
     :b {:commando/macro :double :value 21}}))
 ;; => {:a 10, :b 42}
+
+;; ─────────────────────────────────────────────────────
+;;  :commando/quote  +  :commando/unquote
+;; ─────────────────────────────────────────────────────
+;;
+;; Lisp-style quasiquote. A `:commando/quote` body is INERT
+;; data — commands inside it are NOT executed and the scanner
+;; stops descending — EXCEPT inside `:commando/unquote` holes,
+;; which ARE executed and spliced back into the body.
+;;
+;;   {:commando/quote
+;;    {:kept   {:commando/from [:x]}      ← left untouched
+;;     :filled {:commando/unquote CMD}}}  ← run CMD, paste result
+;;
+;; Use it to CARRY an instruction as payload (a template,
+;; an example, config forwarded to a later `execute`) instead
+;; of evaluating it right now.
+
+(:instruction
+ (commando/execute
+   [builtin/command-quote-spec
+    builtin/command-fn-spec]
+   {:tmpl {:commando/quote
+           {:kept   {:commando/from [:NO :SUCH :PATH]}   ; inert → verbatim
+            :filled {:commando/unquote
+                     {:commando/fn (constantly 42)}}}}})) ; hole → evaluated
+;; => {:tmpl {:kept {:commando/from [:NO :SUCH :PATH]}, :filled 42}}
+;;
+;;   NOTE: the broken `:commando/from` never runs — it's data.
+;;         Only the `:commando/unquote` hole is evaluated.
+
+;; A hole resolves against the WHOLE instruction, so it can
+;; reach values that live outside the quote:
+
+(:instruction
+ (commando/execute
+   [builtin/command-quote-spec
+    builtin/command-fn-spec
+    builtin/command-from-spec]
+   {:x    {:commando/fn (constantly 10)}
+    :tmpl {:commando/quote
+           {:inner    {:commando/from [:x]}            ; inert — stays a command
+            :computed {:commando/unquote
+                       {:commando/from [:x]}}}}}))      ; evaluated — sees :x
+;; => {:x 10,
+;;     :tmpl {:inner {:commando/from [:x]}, :computed 10}}
+;;
+;;   NOTE: `:commando/unquote` is pure syntax — it only means
+;;         something inside a quote, and is never registered as
+;;         a command on its own. A nested `:commando/quote` stays
+;;         fully inert, so quotes nest safely.
 
 
 ;; ┌─────────────────────────────────────────────────────┐
@@ -462,9 +513,10 @@
 ;;
 ;; You now know the core building blocks:
 ;; • Instructions — maps with data + commands
-;; • Six builtin commands: `:commando/from`, `:commando/fn`,
+;; • Builtin commands: `:commando/from`, `:commando/fn`,
 ;;   `:commando/apply`, `:commando/context`,
-;;   `:commando/mutation`, `:commando/macro`
+;;   `:commando/mutation`, `:commando/macro`,
+;;   `:commando/quote` (+ `:commando/unquote`)
 ;; • Drivers (`:=>`) for post-processing + pipelines
 ;; • Custom commands via CommandMapSpec
 ;;

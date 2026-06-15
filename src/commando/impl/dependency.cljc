@@ -14,7 +14,8 @@
      if it Map - the values, if it Vector - elements of vectors
   - :point - depends on command(s) at a specific path, defined by :point-key
       setting key. :point collect only one depedency - the only one it refering.
-  - :none - no dependencies (not implemented, returns empty set by default)"
+  - :none - no dependencies (not implemented, returns empty set by default)
+  - :quote - internal dependency visible only under unquote-keys"
   (fn [_command-path-obj _instruction _path-trie dependency-type] dependency-type))
 
 ;; -- Default --
@@ -30,6 +31,21 @@
 (defmethod find-command-dependencies :none [_command-path-obj _instruction _path-trie _type] #{})
 
 ;; -- All Inside --
+
+(defmethod find-command-dependencies :quote
+  [command-path-obj _instruction path-trie _type]
+  (let [command-path (cm/command-path command-path-obj)
+        sub-trie (get-in path-trie command-path)]
+    (letfn [(collect [acc node]
+              (reduce-kv (fn [a k v]
+                           (cond
+                             ;; `=` (not `identical?`): keyword identity is unreliable in cljs,
+                             ;; which would silently drop quote->hole dependency edges.
+                             (= k :commando.impl.pathtrie/command) (conj a v)
+                             (map? v) (collect a v)
+                             :else a))
+                         acc node))]
+      (collect #{} (dissoc sub-trie :commando.impl.pathtrie/command)))))
 
 (defmethod find-command-dependencies :all-inside
   [command-path-obj _instruction path-trie _type]

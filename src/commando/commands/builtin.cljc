@@ -382,6 +382,75 @@
               (command-mutation (get m "commando-mutation") (dissoc m "commando-mutation"))))
    :dependencies {:mode :all-inside}})
 
+;; == Quote / Unquote =====================================
+
+(def ^:private -quote-unquote-keys [:commando/unquote "commando-unquote"])
+(def ^:private -quote-skip-keys    [:commando/quote   "commando-quote"])
+
+(defn ^:private -unwrap-unquotes
+  "Walks an already-resolved quote body and replaces every unquote hole
+   {:commando/unquote X} (or its string form) with the inner value X.
+   Stops at a nested quote (skip-keys) — that subtree stays inert."
+  [node]
+  (cond
+    (not (coll? node)) node
+    (map? node)
+    (cond
+      (some #(contains? node %) -quote-skip-keys) node
+      (some #(contains? node %) -quote-unquote-keys)
+      (get node (some #(when (contains? node %) %) -quote-unquote-keys))
+      :else (reduce-kv (fn [acc k v] (assoc acc k (-unwrap-unquotes v)))
+              (empty node) node))
+    (vector? node) (mapv -unwrap-unquotes node)
+    :else node))
+
+(def ^{:doc "
+  Description
+    command-quote-spec - marks a subtree as inert data: commands inside a
+    `:commando/quote` body are NOT executed (the scanner stops descending),
+    EXCEPT inside `:commando/unquote` holes, which ARE executed and whose
+    results are substituted back into the body (Lisp quasiquote semantics).
+
+    `:commando/unquote` is pure syntax recognized only inside a quote — it is
+    not a registered command. A nested `:commando/quote` is fully inert and
+    left untouched (including its wrapper). Outside any quote, `:commando/unquote`
+    has no special meaning: the key stays as plain data and whatever is inside
+    runs as an ordinary nested command.
+
+    String forms `\"commando-quote\"` / `\"commando-unquote\"` are supported for
+    JSON-compatible instructions.
+
+  Example
+    (:instruction
+      (commando/execute
+        [command-quote-spec command-fn-spec]
+        {:q {:commando/quote
+             {:value 42
+              :computed {:commando/unquote {:commando/fn (constantly 42)}}}}}))
+     ;; => {:q {:value 42 :computed 42}}
+
+    (:instruction
+      (commando/execute
+        [command-quote-spec command-from-spec]
+        {:result {:commando/quote {:commando/from [:NO :SUCH :PATH]}}}))
+     ;; => {:result {:commando/from [:NO :SUCH :PATH]}}  ; body untouched
+
+   See Also
+     `commando.core/execute`
+     `commando.commands.builtin/command-fn-spec`"}
+  command-quote-spec
+  {:type :commando/quote
+   :recognize-fn #(and (map? %) (or (contains? % :commando/quote)
+                                    (contains? % "commando-quote")))
+   :apply (fn [_ _ m]
+            (-unwrap-unquotes
+              (if (contains? m :commando/quote)
+                (get m :commando/quote)
+                (get m "commando-quote"))))
+   :dependencies {:mode                          :quote
+                  :finding-commands-unquote-keys -quote-unquote-keys
+                  :finding-commands-skip-keys    -quote-skip-keys}})
+
 ;; == Macro ================================================
 
 (defmulti command-macro (fn [tx-type _data] tx-type))
