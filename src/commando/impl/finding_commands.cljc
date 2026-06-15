@@ -30,6 +30,26 @@
 (defmethod enqueue-command-children! :all-inside [queue _command-spec value current-path]
   (enqueue-coll-children! queue value current-path))
 
+(defmethod enqueue-command-children! :quote
+  [queue command-spec value current-path]
+  (let [{:keys [finding-commands-unquote-keys
+                finding-commands-skip-keys]} (:dependencies command-spec)
+        marked?    (fn [m ks] (and (map? m) (some #(contains? m %) ks)))
+        marked-key (fn [m ks] (some #(when (contains? m %) %) ks))]
+    (loop [stack [[current-path value]] q queue]
+      (if-let [[path node] (peek stack)]
+        (cond
+          (and (not= path current-path) (marked? node finding-commands-unquote-keys))
+          (recur (pop stack) (conj! q (conj path (marked-key node finding-commands-unquote-keys))))
+          (and (not= path current-path) (marked? node finding-commands-skip-keys))
+          (recur (pop stack) q)
+          (map? node)
+          (recur (into (pop stack) (map (fn [[k v]] [(conj path k) v])) node) q)
+          (coll? node)
+          (recur (into (pop stack) (map-indexed (fn [i v] [(conj path i) v])) node) q)
+          :else (recur (pop stack) q))
+        q))))
+
 (defn command?
   [{:keys [recognize-fn]
     :as command-spec}
@@ -37,13 +57,13 @@
   (try (recognize-fn value)
        (catch #?(:cljs :default
                  :clj Exception)
-         e
-         (throw (ex-info (str utils/exception-message-header
-                              "Failed while running recognize command on: "
-                              (:type command-spec))
-                         {:command-spec command-spec
-                          :value value
-                          :error (utils/serialize-exception e)})))))
+           e
+           (throw (ex-info (str utils/exception-message-header
+                             "Failed while running recognize command on: "
+                             (:type command-spec))
+                    {:command-spec command-spec
+                     :value value
+                     :error (utils/serialize-exception e)})))))
 
 (defn command-valid?
   [{:keys [validate-params-fn]

@@ -1,3 +1,15 @@
+# 1.2.1
+
+## Added
+
+ADDED `command-quote-spec` in `commando.commands.builtin` — a new command type `:commando/quote` (string form `"commando-quote"`) that brings Lisp-style quasiquote semantics to instructions. A `:commando/quote` body is treated as **inert data**: commands inside it are NOT executed and the scanner stops descending — *except* inside `:commando/unquote` holes (string form `"commando-unquote"`), which ARE executed and whose results are substituted back into the body.
+- `:commando/unquote` is pure syntax recognized only inside a quote — it is not a registered command and has no special meaning outside a quote.
+- A nested `:commando/quote` stays fully inert (its wrapper is left untouched), so quotes can be nested safely.
+- `:commando/from` and other commands inside an `:commando/unquote` resolve against the full instruction, so unquote holes can reference values outside the quote.
+- A `:commando/from` pointing *at* a quote node receives the expanded (unquoted) body.
+
+ADDED dependency mode `:quote` in `commando.impl.dependency` — internal mode used by `command-quote-spec`. Dependencies are collected from the quote sub-trie but are only visible through `:finding-commands-unquote-keys`; the scanner halts at `:finding-commands-skip-keys` (nested quotes). Supported public modes remain `:point`, `:all-inside`, `:none`.
+
 # 1.2.0
 
 ## Breaking Changes

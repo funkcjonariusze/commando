@@ -591,3 +591,98 @@
       (is (commando/ok? result) "Non-map command executes without error")
       (is (= "hello" (get-in (:instruction result) [:calm])) "Non-command values unchanged")
       (is (= "HELLO!" (get-in (:instruction result) [:excited])) "String command applied correctly"))))
+
+
+;; ===========================
+;; QUOTING
+;; ===========================
+
+(deftest quote-stops-scanner
+  (is (= {:result {:commando/from [:NO :SUCH :PATH]}}
+         (:instruction
+          (commando/execute
+            [command-builtin/command-quote-spec
+             command-builtin/command-from-spec]
+             {:result {:commando/quote {:commando/from [:NO :SUCH :PATH]}}})))
+      "body with a broken :commando/from under quote is returned untouched"))
+
+(deftest unquote-executes-and-substitutes
+  (is (= {:q {:value 42 :computed 42}}
+        (:instruction
+         (commando/execute
+           [command-builtin/command-quote-spec
+            command-builtin/command-fn-spec]
+           {:q {:commando/quote
+                {:value 42
+                 :computed {:commando/unquote
+                            {:commando/fn (constantly 42)}}}}})))
+      "the unquote node is executed and its result replaces the node in the body"))
+
+(deftest unquote-body-can-reference-outside
+  (is (= {:x 10
+          :q {:inner {:commando/from [:x]} :computed 10}}
+         (:instruction
+          (commando/execute
+            [command-builtin/command-quote-spec
+             command-builtin/command-from-spec
+             command-builtin/command-fn-spec]
+             {:x  {:commando/fn (constantly 10)}
+              :q  {:commando/quote
+                   {:inner {:commando/from [:x]}
+                    :computed {:commando/unquote
+                                {:commando/from [:x]}}}}})))
+      ":commando/from inside an unquote body sees the outer value"))
+
+(deftest nested-quote-is-inert
+  (is (= {:outer {:inner-quote {:commando/quote {:commando/from [:NO :SUCH]}}}}
+         (:instruction
+          (commando/execute
+            [command-builtin/command-quote-spec
+             command-builtin/command-from-spec]
+             {:outer {:commando/quote
+                      {:inner-quote {:commando/quote {:commando/from [:NO :SUCH]}}}}})))
+      "a nested quote stops the scanner and stays in the body together with its wrapper"))
+
+(deftest string-key-forms
+  (is (= {"result" {"static" 1 "computed" 99}}
+         (:instruction
+          (commando/execute
+            [command-builtin/command-quote-spec
+             command-builtin/command-fn-spec]
+             {"result" {"commando-quote"
+                        {"static"   1
+                         "computed" {"commando-unquote"
+                                     {:commando/fn (constantly 99)}}}}})))
+      "string-key forms of quote and unquote work end to end"))
+
+(deftest from-on-quote-node-sees-resolved-body
+  (is (= {:q  {:value 5}
+          :ref {:value 5}}
+         (:instruction
+          (commando/execute
+            [command-builtin/command-quote-spec
+             command-builtin/command-from-spec]
+             {:q   {:commando/quote {:value 5}}
+              :ref {:commando/from [:q]}})))
+      ":commando/from on a quote node returns the expanded body"))
+
+(deftest multiple-unquotes-in-one-quote
+  (is (= {:q {:a 1 :b 2 :static "x"}}
+         (:instruction
+           (commando/execute
+             [command-builtin/command-quote-spec
+              command-builtin/command-fn-spec]
+             {:q {:commando/quote
+                  {:a      {:commando/unquote {:commando/fn (constantly 1)}}
+                   :b      {:commando/unquote {:commando/fn (constantly 2)}}
+                   :static "x"}}})))
+      "multiple unquotes in one quote are executed independently"))
+
+(deftest unquote-outside-quote-is-data
+  (is (= {:standalone {:commando/unquote 42}}
+         (:instruction
+          (commando/execute
+            [command-builtin/command-quote-spec
+             command-builtin/command-fn-spec]
+             {:standalone {:commando/unquote {:commando/fn (constantly 42)}}})))
+      "outside a quote, unquote is not expanded: the key stays as data and the nested command runs as usual"))

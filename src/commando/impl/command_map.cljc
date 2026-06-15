@@ -108,11 +108,14 @@
                  [:apply fn?]
                  [:dependencies
                   [:merge
-                   [:map [:mode [:enum :none :all-inside :point :custom]]]
+                   [:map [:mode [:enum :none :all-inside :point :quote]]]
                    [:multi {:dispatch :mode}
                     [:none [:map]]
                     [:all-inside [:map]]
-                    [:point [:map [:point-key [:+ [:or :keyword :string]]]]]]]]]
+                    [:point [:map [:point-key [:+ [:or :keyword :string]]]]]
+                    [:quote [:map
+                             [:finding-commands-unquote-keys [:+ [:or :keyword :string]]]
+                             [:finding-commands-skip-keys    [:+ [:or :keyword :string]]]]]]]]]
                 {:registry (merge (malli/default-schemas) (malli-util/schemas))}))
 
 (defn validate-command-spec
