@@ -4,6 +4,7 @@
       :clj [clojure.test :refer [deftest is testing]])
    [commando.commands.builtin :as cmds-builtin]
    [commando.core             :as commando]
+   [commando.utils            :as commando-utils]
    [commando.impl.command-map :as cm]
    [commando.impl.pathtrie    :as pathtrie]
    [commando.impl.utils       :as utils]
@@ -228,9 +229,76 @@
       (is (commando/ok? result) "Vector instruction is acceptable")
       (is (= [{:value 10} 11 22] (:instruction result))))))
 
-;; -----------
-;; Internals always retained
-;; -----------
+
+;; -- guard hooks --
+
+(defmethod cmds-builtin/command-macro :test/echo [_ {:keys [val]}]
+  {"src" val
+   "out" {:commando/from ["src"]}})
+
+(defn- reject-from []
+  (fn [status-map]
+    (commando-utils/hook-reject-commands-fn status-map
+      (fn [{:keys [command-type]}]
+        (when (= command-type :commando/from)
+          {:message "resolver is private, direct client access is not allowed"})))))
+
+(deftest execute-guard-commands-integration-test
+  (testing "Outer guard fails a top-level command before it runs"
+    (let [result (commando/execute [cmds-builtin/command-from-spec]
+                   {"a" 1 "b" {:commando/from ["a"]}}
+                   {:hook-command-guard-outer-fn (reject-from)})]
+      (is (commando/failed? result))
+      (is (= {:commando/from ["a"]} (get-in result [:instruction "b"]))
+          "Rejected command is left unexecuted")))
+
+  (testing "Outer-only guard does not reject commands inside a nested macro execute"
+    (let [result (commando/execute
+                   [cmds-builtin/command-macro-spec cmds-builtin/command-from-spec]
+                   {"m" {:commando/macro :test/echo :val 42}}
+                   {:hook-command-guard-outer-fn (reject-from)})]
+      (is (commando/ok? result))
+      (is (= 42 (get-in result [:instruction "m" "out"])))))
+
+  (testing "Inner-only guard rejects commands inside a nested macro execute, but not top-level ones"
+    (let [top-level (commando/execute [cmds-builtin/command-from-spec]
+                      {"a" 1 "b" {:commando/from ["a"]}}
+                      {:hook-command-guard-inner-fn (reject-from)})
+          nested (commando/execute
+                   [cmds-builtin/command-macro-spec cmds-builtin/command-from-spec]
+                   {"m" {:commando/macro :test/echo :val 42}}
+                   {:hook-command-guard-inner-fn (reject-from)})]
+      (is (commando/ok? top-level))
+      (is (commando/failed? nested))))
+
+  (testing ":hook-command-guard-all-fn rejects both top-level and nested commands"
+    (let [top-level (commando/execute [cmds-builtin/command-from-spec]
+                      {"a" 1 "b" {:commando/from ["a"]}}
+                      {:hook-command-guard-all-fn (reject-from)})
+          nested (commando/execute
+                   [cmds-builtin/command-macro-spec cmds-builtin/command-from-spec]
+                   {"m" {:commando/macro :test/echo :val 42}}
+                   {:hook-command-guard-all-fn (reject-from)})]
+      (is (commando/failed? top-level))
+      (is (commando/failed? nested))))
+
+  (testing "Guard fn has full control of the status-map — arbitrary error shape, multiple errors accumulate"
+    (let [result (commando/execute [cmds-builtin/command-from-spec]
+                   {"a" 1 "b" {:commando/from ["a"]} "c" {:commando/from ["a"]}}
+                   {:hook-command-guard-outer-fn
+                    (fn [status-map]
+                      (commando-utils/hook-reject-commands-fn status-map
+                        (fn [{:keys [command-type path]}]
+                          (when (= command-type :commando/from)
+                            {:message "custom rejection reason"
+                             :custom-error-shape true
+                             :offending-path path}))))})]
+      (is (commando/failed? result))
+      (is (= 2 (count (:errors result))))
+      (is (every? :custom-error-shape (:errors result))))))
+
+
+;; -- Internals always retained --
 
 (deftest internals-always-retained-test
   (testing "Status-map always retains internal keys"
@@ -244,4 +312,3 @@
       (is (some? (:internal/cm-results result)) "cm-results retained")
       (is (some? (:internal/original-instruction result)) "original instruction retained")
       (is (some? (:registry result)) "registry retained"))))
-

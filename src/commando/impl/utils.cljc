@@ -9,7 +9,10 @@
 (def ^:private -execute-config-default
   {:error-data-string true
    :hook-execute-end nil
-   :hook-execute-start nil})
+   :hook-execute-start nil
+   :hook-command-guard-outer-fn nil
+   :hook-command-guard-inner-fn nil
+   :hook-command-guard-all-fn nil})
 
 (def ^:dynamic
   *execute-config*
@@ -25,6 +28,20 @@
      passed in value.
   - `:hook-execute-end` (fn [status-map]): if not nil, can run procedure
      passed in value.
+  - `:hook-command-guard-outer-fn` (fn [status-map] status-map): unlike the
+     hooks above, its return value IS used — it can call
+     `status-map-handle-error` to reject the whole execution before
+     `build-deps-tree`/`execute-commands!` run. Runs only on the outermost
+     `execute` call (stack depth 1).
+  - `:hook-command-guard-inner-fn` (fn [status-map] status-map): same
+     contract, but runs only on nested `execute` calls (stack depth > 1 —
+     e.g. those triggered by `:commando/macro` or `:commando/resolve`).
+  - `:hook-command-guard-all-fn` (fn [status-map] status-map): same contract,
+     runs on every `execute` call regardless of depth. When set, it is used
+     instead of the outer/inner keys (the three are not combined).
+
+  For per-command rejection see `commando.utils/hook-reject-commands-fn`, a helper
+  meant to be called from inside a `:hook-command-guard-*-fn`.
 
   Example
     (commando.core/execute
@@ -59,7 +76,8 @@
     (update :stack conj uuid-execute-identifier)))
 
 (def ^:private -config-keys
-  #{:error-data-string :hook-execute-start :hook-execute-end})
+  #{:error-data-string :hook-execute-start :hook-execute-end
+    :hook-command-guard-outer-fn :hook-command-guard-inner-fn :hook-command-guard-all-fn})
 
 (defn execute-config
   "Returns the effective configuration for `commando/execute`.

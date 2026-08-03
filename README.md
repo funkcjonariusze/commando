@@ -873,14 +873,44 @@ Helper predicates for checking status:
 (commando/execute registry instruction
   {:error-data-string false
    :hook-execute-start (fn [status-map] ...)
-   :hook-execute-end   (fn [status-map] ...)})
+   :hook-execute-end   (fn [status-map] ...)
+   :hook-command-guard-outer-fn (fn [status-map] status-map)
+   :hook-command-guard-inner-fn (fn [status-map] status-map)
+   :hook-command-guard-all-fn   (fn [status-map] status-map)})
 ```
 
 - `:error-data-string` (boolean, default `true`)
-- `:hook-execute-start` (function) — called before execution begins, receives execution context map
-- `:hook-execute-end` (function) — called after execution completes, receives execution context map with `:stats` and `:instruction`
+- `:hook-execute-start` (function) — called before execution begins, receives execution context map; return value is **discarded** (pure observer)
+- `:hook-execute-end` (function) — called after execution completes, receives execution context map with `:stats` and `:instruction`; return value is **discarded** (pure observer)
+- `:hook-command-guard-outer-fn` (function) — called once, right after commands are found, only on the outermost `execute` call; its return value **is used** — it can reject the whole execution
+- `:hook-command-guard-inner-fn` (function) — same contract, only on nested `execute` calls (e.g. from `:commando/macro` or `:commando/resolve`)
+- `:hook-command-guard-all-fn` (function) — same contract, on every `execute` call regardless of depth; when set it is used *instead of* the outer/inner keys, not combined with them
 
 Hooks allow you to observe or instrument the execution lifecycle — for example, to collect timing data, log nested executions, or build execution traces. See [Debugging](#debugging) for a practical use via `execute-trace`.
+
+#### `:hook-command-guard-*-fn`
+
+Unlike `:hook-execute-start`/`:hook-execute-end`, a guard fn's return value is used: it receives the current `status-map` and must return a `status-map` — the same shape every internal pipeline step (`use-registry`, `build-deps-tree`, ...) already works with. Call `commando.impl.status-map/status-map-handle-error` on it (directly, or via the `hook-reject-commands-fn` helper below) to fail the whole `execute` call before `build-deps-tree`/`execute-commands!` run — you decide the `:message`, how many errors to add, and whether to short-circuit early.
+
+The outer/inner split exists because config is inherited by nested `execute` calls (triggered internally by things like `:commando/macro`): a check meant only for the outermost, client-facing call (e.g. an access gate rejecting "private" commands) would otherwise also reject the library's own internal nested calls to the same command type.
+
+For the common case — reject specific commands by type/path/value — use `commando.utils/hook-reject-commands-fn`, which walks the already-computed `:internal/cm-list` for you:
+
+```clojure
+(require '[commando.utils :as commando-utils])
+
+(commando/execute [commands-builtin/command-from-spec]
+  {"a" 1 "b" {:commando/from ["a"]}}
+  {:hook-command-guard-outer-fn
+   (fn [status-map]
+     (commando-utils/hook-reject-commands-fn status-map
+       (fn [{:keys [command-type]}]
+         (when (= command-type :commando/from)
+           {:message "commando/from is not allowed at the top level"}))))})
+;; => {:status :failed, :errors [{:message "commando/from is not allowed at the top level" ...}], ...}
+```
+
+`hook-reject-commands-fn`' `pred` returns `nil` to allow a command through, or an error map — passed through to `status-map-handle-error` verbatim, so its shape is entirely up to you — to reject it. Every found command is checked; rejections don't stop the walk, so every violation ends up in `:errors`.
 
 #### `:error-data-string`
 
