@@ -2,6 +2,22 @@
 
 ## Added
 
+ADDED `:hook-command-guard-outer-fn` / `:hook-command-guard-inner-fn` / `:hook-command-guard-all-fn` config keys to `commando/execute` — a pre-execution reject gate for validating an Instruction's structure per-call, before any command runs. Existing hooks (`:hook-execute-start`/`:hook-execute-end`) are pure observers whose return value is discarded, so there was no way to reject an instruction up front. A guard fn has the shape of an internal pipeline step — `(fn [status-map]) => status-map` — and runs once as a new `guard-commands` step right after `find-commands`. Outer/inner/all scope the check to call depth, since config is inherited by nested `execute` calls (`:commando/macro`, `:commando/resolve`) and an outer-only check must not also reject the library's own internal nested calls.
+
+When defining your own guard fn: to reject, return the status-map wrapped with `commando.impl.status-map/status-map-handle-error` — anything else (including the status-map as-is) lets execution continue.
+
+Plain example:
+```clojure
+(commando/execute registry instruction
+  {:hook-command-guard-outer-fn
+   (fn [status-map]
+     (if (allowed? (:instruction status-map))
+       status-map
+       (status-map/status-map-handle-error status-map {:message "instruction not allowed"})))})
+```
+
+ADDED `commando.utils` namespace, with `hook-reject-commands-fn` — a convenience helper meant to be called from inside a `:hook-command-guard-*-fn`. Walks the already-computed `:internal/cm-list` (no extra instruction traversal) and calls a `{:command-type :path :value} -> error-map-or-nil` predicate per found command; every found command is checked, so multiple violations all end up in `:errors`, not just the first.
+
 ADDED `command-quote-spec` in `commando.commands.builtin` — a new command type `:commando/quote` (string form `"commando-quote"`) that brings Lisp-style quasiquote semantics to instructions. A `:commando/quote` body is treated as **inert data**: commands inside it are NOT executed and the scanner stops descending — *except* inside `:commando/unquote` holes (string form `"commando-unquote"`), which ARE executed and whose results are substituted back into the body.
 - `:commando/unquote` is pure syntax recognized only inside a quote — it is not a registered command and has no special meaning outside a quote.
 - A nested `:commando/quote` stays fully inert (its wrapper is left untouched), so quotes can be nested safely.

@@ -96,6 +96,24 @@
           (assoc :internal/path-trie trie)
           (smap/status-map-handle-success {:message "Commands were successfully collected"}))))))
 
+(defn ^:private guard-commands
+  "Runs the configured :hook-command-guard-*-fn once, right after find-commands
+   and before build-deps-tree/execute-commands! run.
+
+   See 
+   - `commando.impl.utils/*execute-config*` 
+   - `commando.utils/hook-reject-commands-fn`"
+  [status-map]
+  (smap/core-step-safe status-map "guard-commands"
+    (fn [sm]
+      (let [outer?    (= 1 (count (:stack utils/*execute-internals*)))
+            config    (utils/execute-config)
+            guard-fn  (or (:hook-command-guard-all-fn config)
+                        (if outer?
+                          (:hook-command-guard-outer-fn config)
+                          (:hook-command-guard-inner-fn config)))]
+        (if (nil? guard-fn) sm (guard-fn sm))))))
+
 (defn ^:private build-deps-tree
   "Builds forward dependency graph using the path-trie produced by find-commands."
   [{:keys [instruction] :internal/keys [cm-list path-trie] :as status-map}]
@@ -162,8 +180,22 @@
 
    The optional third argument is a config map:
      :error-data-string - (boolean) serialize exception data as strings
-     :hook-execute-start - (fn [status-map]) called before execution
-     :hook-execute-end   - (fn [status-map]) called after execution
+     :hook-execute-start - (fn [status-map]) called before execution;
+        return value is discarded (pure observer)
+     :hook-execute-end   - (fn [status-map]) called after execution;
+        return value is discarded (pure observer)
+     :hook-command-guard-outer-fn - (fn [status-map] status-map) called once
+        right after commands are found, only on the outermost execute call
+        (stack depth 1); unlike the hooks above its return value IS used —
+        it can call status-map-handle-error to reject the whole execution
+        before build-deps-tree/execute-commands! run. See
+        `commando.utils/hook-reject-commands-fn` for a per-command convenience
+        helper to call from inside it.
+     :hook-command-guard-inner-fn - same contract, only on nested execute
+        calls (e.g. from :commando/macro or :commando/resolve)
+     :hook-command-guard-all-fn - same contract, on every execute call
+        regardless of depth (used instead of the outer/inner keys, not
+        combined with them)
 
    Config keys are inherited by nested execute calls. Inner calls can
    override specific keys — non-overridden keys come from the parent.
@@ -185,6 +217,7 @@
          (utils/hook-process (:hook-execute-start config))
          (use-registry registry)
          (find-commands)
+         (guard-commands)
          (build-deps-tree)
          (sort-commands-by-deps)
          (prepare-execution-status-map)
