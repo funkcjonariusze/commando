@@ -31,7 +31,7 @@
   - `:hook-command-guard-outer-fn` (fn [status-map] status-map): unlike the
      hooks above, its return value IS used — it can call
      `status-map-handle-error` to reject the whole execution before
-     `build-deps-tree`/`execute-commands!` run. Runs only on the outermost
+     `step-build-deps-tree`/`step-execute-commands!` run. Runs only on the outermost
      `execute` call (stack depth 1).
   - `:hook-command-guard-inner-fn` (fn [status-map] status-map): same
      contract, but runs only on nested `execute` calls (stack depth > 1 —
@@ -125,7 +125,7 @@
 
    See
      `commando.core/execute`
-     `commando.core/execute-commands!`(binding)"
+     `commando.core/step-execute-commands!`(binding)"
   [] (or *command-map-spec-registry* []))
 
 ;; == Function Resolvers ==================================

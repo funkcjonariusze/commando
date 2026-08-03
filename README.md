@@ -31,6 +31,7 @@
   - [Debugging](#debugging)
 - [Status-Map and Internals](#status-map-and-internals)
   - [Configuring Execution Behavior](#configuring-execution-behavior)
+  - [Flow Control (advanced)](#flow-control-advanced)
   - [Performance](#performance)
 - [Examples & Guides](#examples--guides)
 - [See Also](#see-also)
@@ -780,10 +781,10 @@ Add `:__title` (or `"__title"`) to an instruction to label it in the trace outpu
 - `:errors` — vector of error objects accumulated during execution. Each entry is a map with at least `:message`; may also contain `:error` (serialized exception), `:command-path`, `:command-type`. Empty `[]` on success.
 - `:warnings` — vector of non-critical issues, e.g. skipped pipeline steps after a failure. Empty `[]` when there are no warnings.
 - `:successes` — vector of informational messages about completed pipeline steps. Each entry is a map with `:message`.
-- `:stats` — vector of timing measurements for each pipeline step. Each entry is a tuple `[step-name duration-ns formatted-string]`, e.g. `["execute-commands!" 95838 "95.838µs"]`.
+- `:stats` — vector of timing measurements for each pipeline step. Each entry is a tuple `[step-name duration-ns formatted-string]`, e.g. `["step-execute-commands!" 95838 "95.838µs"]`.
 - `:uuid` — unique identifier for this execution invocation.
 - `:registry` — the built command registry used for this execution.
-- `:internal/cm-list` — set of all discovered Command objects (`CommandMapPath`) found during the `find-commands` step.
+- `:internal/cm-list` — set of all discovered Command objects (`CommandMapPath`) found during the `step-find-commands` step.
 - `:internal/cm-dependency` — forward dependency graph `{CommandMapPath → #{deps}}`, which commands each command depends on.
 - `:internal/cm-running-order` — vector of commands in topologically sorted execution order (Kahn's algorithm).
 - `:internal/cm-results` — map `{CommandMapPath → resolved-value}`, the result of each command's `:apply` function.
@@ -812,12 +813,12 @@ Add `:__title` (or `"__title"`) to an instruction to label it in the trace outpu
   {:message "Dependency map was successfully built"}
   {:message "..."}]
  :stats
- [["use-registry"        12500  "12.5µs"]
-  ["find-commands"        35000  "35µs"]
-  ["build-deps-tree"      18000  "18µs"]
-  ["sort-commands-by-deps" 9000  "9µs"]
-  ["execute-commands!"    95838  "95.838µs"]
-  ["execute"            1085471  "1.085471ms"]]
+ [["step-use-registry"        12500  "12.5µs"]
+  ["step-find-commands"        35000  "35µs"]
+  ["step-build-deps-tree"      18000  "18µs"]
+  ["step-sort-commands-by-deps" 9000  "9µs"]
+  ["step-execute-commands!"    95838  "95.838µs"]
+  ["execute"                 1085471  "1.085471ms"]]
  :uuid "a1b2c3..."
  :registry ...
  :internal/cm-list #{...}
@@ -848,8 +849,8 @@ Add `:__title` (or `"__title"`) to an instruction to label it in the trace outpu
    :path ["3"]
    :command {:commando/from ["WRONG" "PATH"]}}]
  :warnings
- [{:message "Skipping sort-commands-by-deps"}
-  {:message "Skipping execute-commands!"}]
+ [{:message "Skipping step-sort-commands-by-deps"}
+  {:message "Skipping step-execute-commands!"}]
  :successes
  [{:message "Commands were successfully collected"}]
  :stats [...]
@@ -890,7 +891,7 @@ Hooks allow you to observe or instrument the execution lifecycle — for example
 
 #### `:hook-command-guard-*-fn`
 
-Unlike `:hook-execute-start`/`:hook-execute-end`, a guard fn's return value is used: it receives the current `status-map` and must return a `status-map` — the same shape every internal pipeline step (`use-registry`, `build-deps-tree`, ...) already works with. Call `commando.impl.status-map/status-map-handle-error` on it (directly, or via the `hook-reject-commands-fn` helper below) to fail the whole `execute` call before `build-deps-tree`/`execute-commands!` run — you decide the `:message`, how many errors to add, and whether to short-circuit early.
+Unlike `:hook-execute-start`/`:hook-execute-end`, a guard fn's return value is used: it receives the current `status-map` and must return a `status-map` — the same shape every internal pipeline step (`step-use-registry`, `step-build-deps-tree`, ...) already works with. Call `commando.impl.status-map/status-map-handle-error` on it (directly, or via the `hook-reject-commands-fn` helper below) to fail the whole `execute` call before `step-build-deps-tree`/`step-execute-commands!` run — you decide the `:message`, how many errors to add, and whether to short-circuit early.
 
 The outer/inner split exists because config is inherited by nested `execute` calls (triggered internally by things like `:commando/macro`): a check meant only for the outermost, client-facing call (e.g. an access gate rejecting "private" commands) would otherwise also reject the library's own internal nested calls to the same command type.
 
@@ -954,6 +955,29 @@ When `:error-data-string` is `true`, the `:data` key within serialized `Exceptio
 ;;   :value {:commando/from "BROKEN"}}}
 ```
 
+### Flow Control (advanced)
+
+`execute` itself is built from three lower-level functions. They're exported so you can build your own execute chain — e.g. stop the pipeline at a chosen step, inspect the status-map, and resume later.
+
+- `commando.core/steps-pipeline-default` — the default pipeline as data.
+- `commando.core/execute-steps` — runs a coll of steps over a status-map.
+- `commando.core/with-execute-context` — sets up the execution context `execute-steps` needs.
+
+See their docstrings for the exact contract. Example — a custom `execute` variant that stops before commands actually run:
+
+```clojure
+(require '[commando.core :as commando])
+(require '[commando.impl.status-map :as smap])
+
+(defn execute-until-commands [registry instruction]
+  (commando/with-execute-context nil
+    (fn []
+      (commando/execute-steps (smap/status-map-pure {:instruction instruction})
+        (take-while #(not= (:step-name %) :step-execute-commands!)
+          (commando/steps-pipeline-default registry))))))
+
+(:internal/cm-running-order (execute-until-commands registry instruction))
+```
 
 ### Performance
 
@@ -966,17 +990,17 @@ All benchmarks were conducted on an **Intel Core i9-13980HX**. The primary metri
 The graph below illustrates the total execution time for instructions with a typical number of dependencies, ranging from 1,250 to 80,000. As you can see, the execution time scales linearly and remains in the low millisecond range, demonstrating excellent performance for common use cases.
 
 <div align="center">
-<img width="100%" src="./test/perf/commando/Execute. Normal Total.png">
+<img width="100%" src="./test/perf/commando/execute/Execute. Normal Total.png">
 </div>
 
 #### Execution Step Analysis
 
 To provide deeper insight, we've broken down the execution into five distinct steps:
-1.  **use-registry**: Builds the command registry from the provided specs.
-2.  **find-commands**: Scans the instruction map to identify all command instances.
-3.  **build-deps-tree**: Constructs a Directed Acyclic Graph (DAG) of dependencies between commands.
-4.  **sort-commands-by-deps**: Sorts the commands based on the dependency graph to determine the correct execution order.
-5.  **execute-commands!**: Executes the commands in the resolved order.
+1.  **step-use-registry**: Builds the command registry from the provided specs.
+2.  **step-find-commands**: Scans the instruction map to identify all command instances.
+3.  **step-build-deps-tree**: Constructs a Directed Acyclic Graph (DAG) of dependencies between commands.
+4.  **step-sort-commands-by-deps**: Sorts the commands based on the dependency graph to determine the correct execution order.
+5.  **step-execute-commands!**: Executes the commands in the resolved order.
 
 The following graphs show the performance of each step under both normal and extreme load conditions.
 
@@ -985,15 +1009,15 @@ The following graphs show the performance of each step under both normal and ext
 Under normal conditions, each execution step completes in just a few milliseconds. The overhead of parsing, dependency resolution, and execution is minimal, ensuring a fast and responsive system.
 
 <div align="center">
-<img width="100%" src="./test/perf/commando/Execute. Normal Steps.png">
+<img width="100%" src="./test/perf/commando/execute/Execute. Normal Steps.png">
 </div>
 
 **Massive Workloads (up to 5,000,000 dependencies)**
 
-To test the limits of the library, we benchmarked it with instructions containing up to 5 million dependencies. The graph below shows that while the system scales, the `find-commands` (parsing) and `build-deps-tree` (dependency graph construction) phases become the primary bottlenecks. This demonstrates that the core execution remains fast, but performance at extreme scales is dominated by the initial analysis steps.
+To test the limits of the library, we benchmarked it with instructions containing up to 5 million dependencies. The graph below shows that while the system scales, the `step-find-commands` (parsing) and `step-build-deps-tree` (dependency graph construction) phases become the primary bottlenecks. This demonstrates that the core execution remains fast, but performance at extreme scales is dominated by the initial analysis steps.
 
 <div align="center">
-<img width="100%" src="./test/perf/commando/Execute. Massive Dependency Steps.png">
+<img width="100%" src="./test/perf/commando/execute/Execute. Massive Dependency Steps.png">
 </div>
 
 # Examples & Guides

@@ -7,6 +7,7 @@
    [commando.utils            :as commando-utils]
    [commando.impl.command-map :as cm]
    [commando.impl.pathtrie    :as pathtrie]
+   [commando.impl.status-map  :as smap]
    [commando.impl.utils       :as utils]
    [malli.core                :as malli]
    [commando.impl.registry    :as commando-registry]))
@@ -123,46 +124,46 @@
 
 (deftest execute-commands!-test
   (testing "Status handling"
-    (is (commando/failed? (#'commando/execute-commands! fail-status-map)) "Failed status is preserved")
-    (is (not-empty (:warnings (#'commando/execute-commands! fail-status-map))) "Warnings are preserved")
-    (is (commando/failed? (#'commando/execute-commands! midway-fail-execution-map))
+    (is (commando/failed? (#'commando/step-execute-commands! fail-status-map)) "Failed status is preserved")
+    (is (not-empty (:warnings (#'commando/step-execute-commands! fail-status-map))) "Warnings are preserved")
+    (is (commando/failed? (#'commando/step-execute-commands! midway-fail-execution-map))
         "Failed status when command fails midway")
-    (is (commando/ok? (#'commando/execute-commands! basic-command-execution-map))
+    (is (commando/ok? (#'commando/step-execute-commands! basic-command-execution-map))
         "Success status when commands execute successfully")
-    (is (commando/ok? (#'commando/execute-commands! empty-execution-map)) "Success status when no commands to execute")
-    (is (commando/ok? (#'commando/execute-commands! from-command)) "Success status for from command")
-    (is (commando/ok? (#'commando/execute-commands! fn-command)) "Success status for fn command")
-    (is (commando/ok? (#'commando/execute-commands! apply-command)) "Success status for apply command")
-    (is (commando/ok? (#'commando/execute-commands! nil-handler-execution-map)) "Nil returning command is successful"))
+    (is (commando/ok? (#'commando/step-execute-commands! empty-execution-map)) "Success status when no commands to execute")
+    (is (commando/ok? (#'commando/step-execute-commands! from-command)) "Success status for from command")
+    (is (commando/ok? (#'commando/step-execute-commands! fn-command)) "Success status for fn command")
+    (is (commando/ok? (#'commando/step-execute-commands! apply-command)) "Success status for apply command")
+    (is (commando/ok? (#'commando/step-execute-commands! nil-handler-execution-map)) "Nil returning command is successful"))
   (testing "Basic functionality"
-    (is (= 10 (get-in (#'commando/execute-commands! basic-command-execution-map) [:instruction "val"]))
+    (is (= 10 (get-in (#'commando/step-execute-commands! basic-command-execution-map) [:instruction "val"]))
         "Non-command values preserved")
-    (is (= :test-id (get-in (#'commando/execute-commands! basic-command-execution-map) [:instruction "cmd" :id]))
+    (is (= :test-id (get-in (#'commando/step-execute-commands! basic-command-execution-map) [:instruction "cmd" :id]))
         "Command executed")
-    (is (= 42 (get-in (#'commando/execute-commands! from-command) [:instruction "ref"]))
+    (is (= 42 (get-in (#'commando/step-execute-commands! from-command) [:instruction "ref"]))
         "commando/from executes correctly")
-    (is (= 6 (get-in (#'commando/execute-commands! fn-command) [:instruction "calc"]))
+    (is (= 6 (get-in (#'commando/step-execute-commands! fn-command) [:instruction "calc"]))
         "commando/fn executes function with args")
-    (is (= 10 (get-in (#'commando/execute-commands! apply-command) [:instruction "transform"]))
+    (is (= 10 (get-in (#'commando/step-execute-commands! apply-command) [:instruction "transform"]))
         "commando/apply transforms value")
-    (is (= :test-id (get-in (#'commando/execute-commands! midway-fail-execution-map) [:instruction "good" :id]))
+    (is (= :test-id (get-in (#'commando/step-execute-commands! midway-fail-execution-map) [:instruction "good" :id]))
         "When failure happens - partial results are returned")
     (is (= {:test/add-id "should-not-execute"}
-           (get-in (#'commando/execute-commands! midway-fail-execution-map) [:instruction "never"]))
+           (get-in (#'commando/step-execute-commands! midway-fail-execution-map) [:instruction "never"]))
         "After one command fails next ones do not execute")
-    (is (contains? (get-in (#'commando/execute-commands! deep-nested-execution-map)
+    (is (contains? (get-in (#'commando/step-execute-commands! deep-nested-execution-map)
                            [:instruction "level1" "level2" "level3" "deep"])
                    :id)
         "Deep nested command executes")
-    (is (not-empty (:errors (#'commando/execute-commands! bad-command-execution-map)))
+    (is (not-empty (:errors (#'commando/step-execute-commands! bad-command-execution-map)))
         "Errors populated for failing command")
-    (is (every? #(contains? (get-in (#'commando/execute-commands! large-commands-execution-map) [:instruction %]) :id)
+    (is (every? #(contains? (get-in (#'commando/step-execute-commands! large-commands-execution-map) [:instruction %]) :id)
                 (range 20))
         "All commands execute successfully"))
   (testing "Edge cases"
-    (is (= {"val" 42} (:instruction (#'commando/execute-commands! empty-execution-map)))
+    (is (= {"val" 42} (:instruction (#'commando/step-execute-commands! empty-execution-map)))
         "Empty running order preserves instruction values")
-    (is (= nil (get-in (#'commando/execute-commands! nil-handler-execution-map) [:instruction "nil-handler"]))
+    (is (= nil (get-in (#'commando/step-execute-commands! nil-handler-execution-map) [:instruction "nil-handler"]))
         "Nil values handled correctly")))
 
 ;; -- Integration: execute pipeline --
@@ -297,6 +298,26 @@
       (is (= 2 (count (:errors result))))
       (is (every? :custom-error-shape (:errors result))))))
 
+
+;; -- Flow Control (steps-pipeline-default / execute-steps / with-execute-context) --
+
+(deftest execute-steps-halt-and-resume-test
+  (testing "Pipeline can be halted before commands run, inspected, then resumed to completion"
+    (let [instruction {"a" 1 "b" {:commando/from ["a"]}}
+          steps (commando/steps-pipeline-default [cmds-builtin/command-from-spec])
+          halted (commando/with-execute-context nil
+                   (fn []
+                     (commando/execute-steps
+                       (smap/status-map-pure {:instruction instruction})
+                       (take-while #(not= (:step-name %) :step-execute-commands!) steps))))
+          resumed (commando/with-execute-context nil
+                    (fn []
+                      (commando/execute-steps halted
+                        (drop-while #(not= (:step-name %) :step-execute-commands!) steps))))]
+      (is (some? (:internal/cm-running-order halted)) "Running order is available before commands run")
+      (is (nil? (:internal/cm-results halted)) "Commands have not run yet")
+      (is (commando/ok? resumed))
+      (is (= 1 (get-in resumed [:instruction "b"])) "Resumed run executes the deferred commands"))))
 
 ;; -- Internals always retained --
 

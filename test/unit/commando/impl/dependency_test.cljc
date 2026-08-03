@@ -117,31 +117,31 @@
 
 (deftest build-deps-tree
   (testing "Status handling"
-    (is (commando/failed? (#'commando/build-deps-tree failed-status-map)) "Failed status is preserved")
-    (is (commando/failed? (#'commando/build-deps-tree
+    (is (commando/failed? (#'commando/step-build-deps-tree failed-status-map)) "Failed status is preserved")
+    (is (commando/failed? (#'commando/step-build-deps-tree
                            {:status :ok
                             :instruction {:ref {:commando/from [:nonexistent]}}
                             :registry registry
                             :internal/cm-list [(cm/command-map-path [:ref] cmds-builtin/command-from-spec)]}))
         "Returns failed status for non-existent path references")
-    (is (commando/ok? (#'commando/build-deps-tree empty-ok-status-map)) "Success status with empty command list"))
+    (is (commando/ok? (#'commando/step-build-deps-tree empty-ok-status-map)) "Success status with empty command list"))
   (testing "Dependency patterns"
-    (let [deps (:internal/cm-dependency (#'commando/build-deps-tree all-inside-status-map))]
+    (let [deps (:internal/cm-dependency (#'commando/step-build-deps-tree all-inside-status-map))]
       (is (contains? (get deps parent-cmd) child-cmd) "Parent depends on child (all-inside)"))
-    (is (contains? (get (:internal/cm-dependency (#'commando/build-deps-tree point-deps-status-map)) ref-cmd)
+    (is (contains? (get (:internal/cm-dependency (#'commando/step-build-deps-tree point-deps-status-map)) ref-cmd)
                    target-cmd)
         "Ref depends on target (point)")
-    (let [deps (:internal/cm-dependency (#'commando/build-deps-tree chained-deps-map))]
+    (let [deps (:internal/cm-dependency (#'commando/step-build-deps-tree chained-deps-map))]
       (is (contains? (get deps chain-cmd-a) chain-cmd-b) "A depends on B")
       (is (contains? (get deps chain-cmd-b) chain-cmd-c) "B depends on C")
       (is (empty? (get deps chain-cmd-c)) "C has no dependencies"))
-    (let [deps (:internal/cm-dependency (#'commando/build-deps-tree diamond-deps-map))]
+    (let [deps (:internal/cm-dependency (#'commando/step-build-deps-tree diamond-deps-map))]
       (is (contains? (get deps diamond-cmd-b) diamond-cmd-d) "B depends on D")
       (is (contains? (get deps diamond-cmd-c) diamond-cmd-d) "C depends on D")
       (is (empty? (get deps diamond-cmd-d)) "D has no dependencies"))
-    (let [deps (:internal/cm-dependency (#'commando/build-deps-tree deep-cross-ref-map))]
+    (let [deps (:internal/cm-dependency (#'commando/step-build-deps-tree deep-cross-ref-map))]
       (is (contains? (get deps deep-shallow) shallow-target) "Deep nested depends on shallow target"))
-    (let [deps (:internal/cm-dependency (#'commando/build-deps-tree sibling-deps-map))]
+    (let [deps (:internal/cm-dependency (#'commando/step-build-deps-tree sibling-deps-map))]
       (is (contains? (get deps sibling1) sibling2) "Sibling1 depends on sibling2")))
   (testing "Complex multi-level dependency resolution"
     (let [large-instruction
@@ -154,10 +154,10 @@
                       :cache {:commando/from [:products :load]}}
            :orders {:create {:commando/from [:users :validate]}
                     :prepare {:commando/from [:products :cache]}}}
-          found (#'commando/find-commands
+          found (#'commando/step-find-commands
                   {:status :ok :instruction large-instruction :registry registry})
           cmds (:internal/cm-list found)
-          result (#'commando/build-deps-tree found)
+          result (#'commando/step-build-deps-tree found)
           deps (:internal/cm-dependency result)]
       (is (commando/ok? result) "Successfully processes large dependency tree")
       (is (contains? (get deps (cmd-by-path [:users :fetch] cmds)) (cmd-by-path [:config :database] cmds))
@@ -169,7 +169,7 @@
       (is (contains? (get deps (cmd-by-path [:orders :prepare] cmds)) (cmd-by-path [:products :cache] cmds))
           "orders.prepare depends on products.cache")))
   (testing "Empty command list"
-    (let [result (#'commando/build-deps-tree
+    (let [result (#'commando/step-build-deps-tree
                    (status-map-with-trie
                      {:status :ok :instruction {} :registry registry :internal/cm-list []}))]
       (is (commando/ok? result) "Handles empty command list")
@@ -185,7 +185,7 @@
                                                     :some-val {:test/add-id :nested}}}
                              :registry registry
                              :internal/cm-list [goal2-cmd goal2-someval-cmd]})
-          result (#'commando/build-deps-tree test-status-map)
+          result (#'commando/step-build-deps-tree test-status-map)
           deps (:internal/cm-dependency result)]
       (is (commando/ok? result) "Successfully processes :all-inside dependency")
       (is (contains? (get deps goal2-cmd) goal2-someval-cmd)
@@ -199,7 +199,7 @@
                                            :ref {:commando/from [:goal-1]}}
                              :registry registry
                              :internal/cm-list [goal1-cmd ref-cmd]})
-          result (#'commando/build-deps-tree test-status-map)
+          result (#'commando/step-build-deps-tree test-status-map)
           deps (:internal/cm-dependency result)]
       (is (commando/ok? result) "Successfully processes :point dependency")
       (is (contains? (get deps ref-cmd) goal1-cmd)
@@ -215,7 +215,7 @@
                              :instruction {:standalone {:test/none :independent}}
                              :registry (commando/registry-create [none-command])
                              :internal/cm-list [none-cmd]})
-          result (#'commando/build-deps-tree test-status-map)
+          result (#'commando/step-build-deps-tree test-status-map)
           deps (:internal/cm-dependency result)]
       (is (commando/ok? result) "Successfully processes :none dependency")
       (is (empty? (get deps none-cmd)) "Command with :none mode has no dependencies"))))
