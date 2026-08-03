@@ -34,10 +34,10 @@
 
 (deftest sort-entities-by-deps
   (testing "Status handling"
-    (is (commando/failed? (#'commando/sort-commands-by-deps
+    (is (commando/failed? (#'commando/step-sort-commands-by-deps
                             {:status :failed :instruction {} :registry registry :internal/cm-list []}))
         "Failed status is preserved")
-    (is (commando/ok? (#'commando/sort-commands-by-deps
+    (is (commando/ok? (#'commando/step-sort-commands-by-deps
                         {:status :ok :instruction {:a 1} :registry registry :internal/cm-list []}))
         "Success status with empty dependency map"))
   (testing "Simple dependency chain ordering"
@@ -49,7 +49,7 @@
                     :internal/cm-dependency {chain-cmd-a #{chain-cmd-b}
                                              chain-cmd-b #{chain-cmd-c}
                                              chain-cmd-c #{}}}
-          result (#'commando/sort-commands-by-deps deps-map)
+          result (#'commando/step-sort-commands-by-deps deps-map)
           order (:internal/cm-running-order result)]
       (is (commando/ok? result) "Successfully sorts linear dependency chain")
       (is (= 3 (count order)) "Returns all commands in order")
@@ -66,7 +66,7 @@
                                              diamond-cmd-b #{diamond-cmd-d}
                                              diamond-cmd-c #{diamond-cmd-d}
                                              diamond-cmd-d #{}}}
-          result (#'commando/sort-commands-by-deps deps-map)
+          result (#'commando/step-sort-commands-by-deps deps-map)
           order (:internal/cm-running-order result)]
       (is (commando/ok? result) "Successfully sorts diamond dependency")
       (is (= 4 (count order)) "Returns all commands in order")
@@ -80,7 +80,7 @@
                     :registry registry
                     :internal/cm-dependency {circular-cmd-a #{circular-cmd-b}
                                              circular-cmd-b #{circular-cmd-a}}}
-          result (#'commando/sort-commands-by-deps deps-map)]
+          result (#'commando/step-sort-commands-by-deps deps-map)]
       (is (commando/failed? result) "Detects circular dependency and returns failed status")
       (is (some #(re-find #"cyclic dependency" %) (map :message (:errors result)))
           "Error message mentions cyclic dependency"))))

@@ -23,7 +23,7 @@
 (deftest find-commands
   (testing "Basic cases"
     (is (= #{(cm/command-map-path [] #'commando-registry/default-command-map-spec)}
-          (:internal/cm-list (#'commando/find-commands
+          (:internal/cm-list (#'commando/step-find-commands
                                {:status :ok
                                 :instruction {}
                                 :registry registry})))
@@ -37,7 +37,7 @@
              (cm/command-map-path [:some-val :a] #'commando-registry/default-command-value-spec)
              (cm/command-map-path [:i :am] #'commando-registry/default-command-map-spec)
              (cm/command-map-path [:i :am :deep] #'commando-registry/default-command-value-spec)}
-          (:internal/cm-list (#'commando/find-commands
+          (:internal/cm-list (#'commando/step-find-commands
                                {:status :ok
                                 :instruction {:some-val {:a 2}
                                               :some-other 3
@@ -51,7 +51,7 @@
              (cm/command-map-path [:list] #'commando-registry/default-command-value-spec)
              (cm/command-map-path [:primitive] #'commando-registry/default-command-value-spec)
              (cm/command-map-path [:java-obj] #'commando-registry/default-command-value-spec)}
-           (:internal/cm-list (#'commando/find-commands
+           (:internal/cm-list (#'commando/step-find-commands
                                 {:status :ok
                                  :instruction {:set #{:commando/from [:target]}
                                                :list (list {:commando/from [:target]})
@@ -66,7 +66,7 @@
              (cm/command-map-path [:valid] #'commando-registry/default-command-vec-spec)
              (cm/command-map-path [:target] #'commando-registry/default-command-value-spec)
              (cm/command-map-path [:valid 0] cmds-builtin/command-from-spec)}
-           (:internal/cm-list (#'commando/find-commands
+           (:internal/cm-list (#'commando/step-find-commands
                                 {:status :ok
                                  :instruction {:set #{:not-found}
                                                :list (list :not-found)
@@ -82,17 +82,17 @@
             (cm/command-map-path [:a "some" :c] #'commando-registry/default-command-vec-spec)
             (cm/command-map-path [:a "some" :c 0] #'commando-registry/default-command-value-spec)
             (cm/command-map-path [:a "some" :c 1] cmds-builtin/command-from-spec)}
-          (:internal/cm-list (#'commando/find-commands
+          (:internal/cm-list (#'commando/step-find-commands
                                {:status :ok
                                 :instruction {:a {"some" {:c [:some {:commando/from [:target]}]}}
                                               :target 42}
                                 :registry registry})))
       "Example of usage commando/from inside of deep map")
     (is (= :failed
-          (:status (#'commando/find-commands {:status :failed})))
+          (:status (#'commando/step-find-commands {:status :failed})))
       "Failed status is preserved")
     (is
-     (let [mixed-keys-result (:internal/cm-list (#'commando/find-commands
+     (let [mixed-keys-result (:internal/cm-list (#'commando/step-find-commands
                                                   {:status :ok
                                                    :instruction {"string-key" {:commando/from [:a]}
                                                                  :keyword-key {:commando/from [:a]}

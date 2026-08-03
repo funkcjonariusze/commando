@@ -474,12 +474,12 @@
   [stats]
   (when (seq stats)
     (let [stats-map (into {} (map (fn [[k _ formatted]] [(name k) formatted]) stats))
-          cmds-t    (get stats-map "execute-commands!")
+          cmds-t    (get stats-map "step-execute-commands!")
           exec-t    (get stats-map "execute")]
       (cond
-        (and cmds-t exec-t) (str "execute-commands! " cmds-t " · execute " exec-t)
+        (and cmds-t exec-t) (str "step-execute-commands! " cmds-t " · execute " exec-t)
         exec-t              (str "execute " exec-t)
-        cmds-t              (str "execute-commands! " cmds-t)
+        cmds-t              (str "step-execute-commands! " cmds-t)
         :else               nil))))
 
 (defn ^:private trace-print-node
