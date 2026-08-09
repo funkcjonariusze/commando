@@ -4,7 +4,7 @@
 
 [![Clojars Project](https://img.shields.io/clojars/v/org.clojars.funkcjonariusze/commando.svg)](https://clojars.org/org.clojars.funkcjonariusze/commando)
 [![Run tests](https://github.com/funkcjonariusze/commando/actions/workflows/unit_test.yml/badge.svg)](https://github.com/funkcjonariusze/commando/actions/workflows/unit_test.yml)
-[![cljdoc badge](https://cljdoc.org/badge/org.clojars.funkcjonariusze/commando)](https://cljdoc.org/d/org.clojars.funkcjonariusze/commando/1.2.1)
+[![cljdoc badge](https://cljdoc.org/badge/org.clojars.funkcjonariusze/commando)](https://cljdoc.org/d/org.clojars.funkcjonariusze/commando/1.3.0)
 
 **Commando** is a flexible Clojure/ClojureScript library for building data-driven DSLs.
 
@@ -42,10 +42,10 @@
 
 ```clojure
 ;; deps.edn with git
-{org.clojars.funkcjonariusze/commando {:mvn/version "1.2.1"}}
+{org.clojars.funkcjonariusze/commando {:mvn/version "1.3.0"}}
 
 ;; leiningen
-[org.clojars.funkcjonariusze/commando "1.2.1"]
+[org.clojars.funkcjonariusze/commando "1.3.0"]
 ```
 
 ## Quick Start
